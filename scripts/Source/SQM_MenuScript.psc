@@ -1,0 +1,1248 @@
+Scriptname SQM_MenuScript extends SKI_ConfigBase
+{This script adds a MCM for the Quick Menu Widget and handles all
+;menu cycling logic}
+;-------------------------------------------------------------------------
+;NOTE: Many of the methods here were obtained/modified 
+;from the source code from the SkyUI team.  
+;All credit to them.  Thank you!
+;-------------------------------------------------------------------------
+;Properties
+;-------------------------------------------------------------------------
+SQM_WidgetScript Property SQM Auto
+
+Actor Property PlayerRef  Auto  
+
+Shout[] Property shoutListFull  Auto  
+Shout[] _DLCShouts
+Spell[] _voiceSpells
+
+;-------------------------------------------------------------------------
+;OIDs for each MCM object
+;-------------------------------------------------------------------------
+;x, y location and scale for the widget 
+int xOID
+int yOID
+int scaleOID
+;variables controlling the widget's fadeout property
+int fadeOID
+int fadeAlphaOID
+int fadeOutDurationOID
+int fadeInDurationOID
+int fadeWaitOID
+bool fadeOut = true
+float fadeAlpha = 0.0
+float fadeOutDuration = 200.0
+float fadeInDuration = 15.0
+float fadeWait = 500.0
+;Used to control fading out when many buttons are pressed
+int waitsQueued
+
+;toggle visibility box, transparency slider, and refresh button
+int visOID
+int transOID
+int refreshOID
+;If this is toggled, only favorited items will show up in the MCM menu
+int mustBeFavoritedOID
+bool mustBeFavorited = false
+
+;array of object id's for each item queue (MCM menu)
+int[] topArrayOID
+int[] bottomArrayOID
+int[] leftArrayOID
+int[] rightArrayOID
+
+;mcm keymap option id's
+int keyOID_UP
+int keyOID_DOWN
+int keyOID_LEFT
+int keyOID_RIGHT
+int keyOID_ACTIVATE
+
+;-------------------------------------------------------------------------
+;Global variables 
+;-------------------------------------------------------------------------
+;these variables contain the item and item IDs of the different elements in the queues
+string[]	 _potionListName
+string[]	 _shoutListName
+
+;right and left hand lists are separate because left hand can equip shields and torches, which RH can't
+string[]	 _rightHandListName
+string[]	 _leftHandListName 
+
+;These contain the full list of items the player can choose from in the MCM menu
+Form[]		 _potionList
+Form[]		 _shoutsKnown
+Form[]		 _rightHandList 
+Form[]		 _leftHandList 
+
+;these contain the objects for the final queues the user decides upon
+Form[]		 _potionQueue
+Form[]		 _shoutQueue
+Form[]		 _rightHandQueue 
+Form[]		 _leftHandQueue 
+
+;contain indexes of items in their lists
+int[]       _potionIndexMap
+int[]       _shoutIndexMap
+int[]       _rightHandIndexMap
+int[]       _leftHandIndexMap
+
+;array of indices for each item dropdown menu
+int[] 		topIndex
+int[] 		bottomIndex
+int[] 		leftIndex
+int[] 		rightIndex
+
+;initialize values for visibility and transparency
+bool visVal = true
+float transVal = 50.0
+
+;keys
+int upKey = 45			; X
+int downKey = 21		; Y
+int leftKey = 47		; V
+int rightKey = 48		; B
+int activateKey = 34	; G
+
+int MAX_QUEUE_SIZE = 7
+
+;_currQIndices contains indices of currently active slots
+;0 - LH
+;1 - RH
+;2 - Power
+;3 - Item
+int[]		 _currQIndices
+
+;If players have dragonborn and/or dawnguard, load their dragonshouts
+Function CheckForDLC()
+	_DLCShouts = new Shout[8]
+    ;GetFormFromFile must be loaded into a form object before casting to a shout for some reason
+    Form[] shoutForms = new Form[8] 
+	int ndx = 0;
+	;check for Dawnguard
+
+	if(Game.GetFormFromFile(0x00000800, "Dawnguard.esm"))
+		;Soul Tear
+		shoutForms[ndx] = Game.GetFormFromFile(0x00007CB6, "Dawnguard.esm") As Shout
+		;Summon Durnehviir
+		shoutForms[ndx+1] = Game.GetFormFromFile(0x000030D2, "Dawnguard.esm") As Shout
+		;Drain Vitality
+		shoutForms[ndx+2] = Game.GetFormFromFile(0x00008A62, "Dawnguard.esm") As Shout
+		ndx += 3 
+	endif
+
+	;check for Dragonborn
+	if(Game.GetFormFromFile(0x00018DDD, "Dragonborn.esm"))
+		;Battle Fury
+		shoutForms[ndx] = Game.GetFormFromFile(0x0002AD09, "Dragonborn.esm") As Shout
+		;Bend Will
+		shoutForms[ndx+1] = Game.GetFormFromFile(0x000179D8, "Dragonborn.esm") As Shout
+		;Cyclone
+		shoutForms[ndx+2] = Game.GetFormFromFile(0x000200C0, "Dragonborn.esm") As Shout
+		;Dragon Aspect
+		shoutForms[ndx+3] = Game.GetFormFromFile(0x0001DF92, "Dragonborn.esm") As Shout
+	endif
+    int i = 0
+    while shoutForms[i]
+        _DLCShouts[i] = shoutForms[i] as Shout
+        i += 1
+    endWhile
+endFunction
+;-------------------------------------------------------------------------
+;Functions for populating the queues with items in the
+;inventory 
+;-------------------------------------------------------------------------
+
+;populates potion and weapon queues for the dropdown options in the MCM
+Function populateLists(ObjectReference akContainer)
+    EmptyLists()
+	_potionListName[0] = "<Empty>"
+	_rightHandListName[0] = "<Empty>"
+	_leftHandListName[0] = "<Empty>"
+
+	_potionList[0] = None
+	_rightHandList[0] = None
+	_leftHandList[0] = None 
+
+	Int ndx = 0
+	Int nextPotionIndex = 1 
+	Int nextRHIndex = 1
+	Int nextLHIndex = 1
+	Int itemCount = 0
+    SetTextOptionValue(refreshOID, "Updating Items")
+	;iterate through all items in player's inventory
+	While ndx < akContainer.GetNumItems()
+		Form kForm = akContainer.GetNthForm(ndx)
+        ;if it must be favorited, make sure it is. else proceed 
+		if(!mustBeFavorited || (mustBeFavorited && Game.isObjectFavorited(kForm)))
+			If kForm.GetType() == 46 ; is a potion
+                itemCount = PlayerRef.getItemCount(kForm)
+				_potionListName[nextPotionIndex] = kForm.getName() + "  (" + itemCount + ")"
+				_potionList[nextPotionIndex] = kForm
+				nextPotionIndex += 1
+			elseIf kForm.GetType() == 41 ; is a weapon
+				;only add 2 handers and ranged to RH slot
+				if((kForm as weapon).GetWeapontype() > 4)
+					_rightHandListName[nextRHIndex] = kForm.getName()
+					_rightHandList[nextRHIndex] = kForm
+					nextRHIndex += 1
+				else
+				    ;1h weapons go in both
+					_rightHandListName[nextRHIndex] = kForm.getName()
+					_rightHandList[nextRHIndex] = kForm
+					nextRHIndex += 1
+					;adding to LH queue
+					_leftHandListName[nextLHIndex] = kForm.getName()
+					_leftHandList[nextLHIndex] = kForm
+					nextLHIndex += 1
+				endif
+			;add shields to the lefthand queue
+			elseIf (kForm.GetType() == 26 && (kForm as Armor).GetSlotMask() == 512)
+				_leftHandListName[nextLHIndex] = kForm.getName()
+				_leftHandList[nextLHIndex] = kForm
+				nextLHIndex += 1
+			;Light (Torch)
+			elseIf kForm.GetType() == 31
+                itemCount = PlayerRef.getItemCount(kForm)
+				_leftHandListName[nextLHIndex] = kForm.getName() + "  (" + itemCount + ")"
+				_leftHandList[nextLHIndex] = kForm
+				nextLHIndex += 1	
+			endIf
+		endIf
+		ndx += 1
+	endWhile
+
+	EquipSlot voiceSlot	= Game.GetFormFromFile(0x00025bee, "Skyrim.esm") as EquipSlot
+    ndx = 0
+    ;reset voice spells
+    int voiceNdx = 0
+    SetTextOptionValue(refreshOID, "Updating Spells")
+    int i = 0
+    while i < 128
+        _voiceSpells[i] = None
+        i+=1
+    endWhile
+    ;Player spells are located in different places, so we have to accumulate them first
+    Spell[] allSpells = GetAllSpells() 
+    int spellCount = PlayerRef.GetActorBase().GetSpellCount() + PlayerRef.GetRace().GetSpellCount() + PlayerRef.GetSpellCount()
+    ;Add spells to our lists
+	While ndx < spellCount
+		Spell currSpell = allSpells[ndx] 
+		;make sure it is favorited, remove spells that can't be equipped in the hands
+		if(isSpellValid(currSpell) && (!mustBeFavorited || (mustBeFavorited && Game.isObjectFavorited(currSpell))) )
+        ;Debug.MessageBox(currSpell.getName() + "   " + currSpell + "   " + currSpell.GetFormID() + "   ")
+            if currSpell.GetEquipType() == voiceSlot 
+                _voiceSpells[voiceNdx] = currSpell
+                voiceNdx += 1
+            else
+                ;adding to RH queue
+                _rightHandListName[nextRHIndex] = currSpell.getName()
+                _rightHandList[nextRHIndex] = currSpell 
+                nextRHIndex += 1
+                ;adding to LH queue
+                _leftHandListName[nextLHIndex] = currSpell.getName()
+                _leftHandList[nextLHIndex] = currSpell 
+                nextLHIndex += 1
+            endIf
+            int keywordNdx = 0
+		endIf
+		ndx += 1
+	endWhile
+    SetTextOptionValue(refreshOID, "Updating Shouts")
+	populateShoutList()
+endFunction
+
+Spell[] Function GetAllSpells()
+    Spell[] allSpells = new Spell[128]
+    Spell currSpell
+    int ndx = 0
+    int spellNdx = 0
+    ;Actor base spells
+    while ndx < PlayerRef.GetActorBase().GetSpellCount()
+        allSpells[spellNdx] = PlayerRef.GetActorBase().GetNthSpell(ndx)
+        ndx+=1
+        spellNdx+=1
+    endWhile
+    ndx = 0
+    ;Race base spells
+    while ndx < PlayerRef.GetRace().GetSpellCount()
+        allSpells[spellNdx] = PlayerRef.GetRace().GetNthSpell(ndx)
+        ndx+=1
+        spellNdx+=1
+    endWhile
+    ndx = 0
+    ;Added spells
+    while ndx < PlayerRef.GetSpellCount()
+        allSpells[spellNdx] = PlayerRef.GetNthSpell(ndx)
+        ndx+=1
+        spellNdx+=1
+    endWhile
+    return allSpells
+endFunction
+ 
+;armor set bonuses and passive spellsare returned by getNthSpell.  We do not want these to show up in our menu so we have
+;to manually remove them
+bool Function isSpellValid(Spell s)
+    
+    ;----------------------------------------------------------------------
+    ;Vanilla
+    ;----------------------------------------------------------------------
+    ;Shrouded Armor
+    if s == Game.GetFormFromFile(0x0001711D, "Skyrim.esm")
+        return false
+    endIf
+    ;Nightingale Armor
+    if s == Game.GetFormFromFile(0x0001711F, "Skyrim.esm")
+        return false
+    endIf
+    ;Combat Heal Rate
+    if s == Game.GetFormFromFile(0x001031D3, "Skyrim.esm")
+        return false
+    endIf
+    ;Imperial Luck
+    if s == Game.GetFormFromFile(0x000EB7EB, "Skyrim.esm")
+        return false
+    endIf
+    ;Argonian Waterbreathing
+    if s == Game.GetFormFromFile(0x000AA01B, "Skyrim.esm")
+        return false
+    endIf
+    ;Argonian Resist Disease
+    if s == Game.GetFormFromFile(0x00104ACF, "Skyrim.esm")
+        return false
+    endIf
+    ;Wood Elf Resist Disease and Poison
+    if s == Game.GetFormFromFile(0x000AA025, "Skyrim.esm")
+        return false
+    endIf
+    ;Breton Resist Magic
+    if s == Game.GetFormFromFile(0x000AA01F, "Skyrim.esm")
+        return false
+    endIf
+    ;Dark Elf Resist Fire 
+    if s == Game.GetFormFromFile(0x000AA021, "Skyrim.esm")
+        return false
+    endIf
+    ;Khajiit Claws
+    if s == Game.GetFormFromFile(0x000AA01E, "Skyrim.esm")
+        return false
+    endIf
+    ;Nord Resist Frost
+    if s == Game.GetFormFromFile(0x000AA020, "Skyrim.esm")
+        return false
+    endIf
+    ;Redguard Resist Poison
+    if s == Game.GetFormFromFile(0x000AA023, "Skyrim.esm")
+        return false
+    endIf
+    ;----------------------------------------------------------------------
+    ;Dawnguard
+    ;----------------------------------------------------------------------
+    ;Crossbow Bonus
+    if s == Game.GetFormFromFile(0x00012CCC, "Dawnguard.esm")
+        return false
+    endIf
+
+    ;----------------------------------------------------------------------
+    ;DragonBorn
+    ;----------------------------------------------------------------------
+    ;Ahzidal's Genius
+    if s == Game.GetFormFromFile(0x00027332, "Dragonborn.esm")
+        return false
+    endIf
+    ;Deathbrand Instinct
+    if s == Game.GetFormFromFile(0x0003B563, "Dragonborn.esm")
+        return false
+    endIf
+   return true
+endFunction
+
+;populates spell queue for the dropdown options in the MCM
+Function populateShoutList()
+
+	_shoutListName[0] = "<Empty>"
+	_shoutsKnown[0] = None
+
+	Int ndx = 0
+	Int nextShoutIndex = 1 
+	;Unfortunately, there is no getShouts() method like there is for spells.  So to check if the player
+	;knows a shout, we have to check a hardcoded list of each shout in the game and see if the player knows it
+	While ndx < shoutListFull.Length
+		Shout currShout = shoutListFull[ndx]
+		if(PlayerRef.HasSpell(currShout) && (!mustBeFavorited || (mustBeFavorited && Game.isObjectFavorited(currShout))) )
+			_shoutListName[nextShoutIndex] = currShout.getName()
+			_shoutsKnown[nextShoutIndex] = currShout
+			nextShoutIndex += 1
+		endIf
+		ndx += 1
+	endWhile
+	
+	;Now we check for shouts from Dragonborn and Dawnguard.  They must be checked seperately, as it is possible
+	;Dragonborn and Dawnguard aren't installed
+    CheckForDLC()
+	ndx = 0
+	While ndx < _DLCShouts.Length
+		Shout currShout = _DLCShouts[ndx]
+		if(PlayerRef.HasSpell(currShout) && (!mustBeFavorited || (mustBeFavorited && Game.isObjectFavorited(currShout))) )
+			_shoutListName[nextShoutIndex] = currShout.getName()
+			_shoutsKnown[nextShoutIndex] = currShout
+			nextShoutIndex += 1
+		endIf
+		ndx += 1
+	endWhile
+
+	ndx = 0
+	While ndx < _voiceSpells.Length 
+        Spell currSpell = _voiceSpells[ndx]
+		if(PlayerRef.HasSpell(currSpell) && (!mustBeFavorited || (mustBeFavorited && Game.isObjectFavorited(currSpell))) )
+			_shoutListName[nextShoutIndex] = currSpell.getName()
+			_shoutsKnown[nextShoutIndex] = currSpell
+			nextShoutIndex += 1
+		endIf
+		ndx += 1
+	endWhile
+        
+         
+endFunction
+
+;-----------------------------------------------------------------------------------------------------------------------
+;QUEUE FUNCTIONALITY CODE
+;-----------------------------------------------------------------------------------------------------------------------
+Int[] Function GetItemIconArgs(int queueID)
+    Form[] Q
+    if(queueID == 1)
+        Q = _rightHandQueue
+    elseif(queueID == 2)
+        Q = _shoutQueue
+    elseif(queueID == 3)
+        Q = _potionQueue
+    else
+        Q = _leftHandQueue
+    endIf
+    Form item = Q[_currQIndices[queueID]]
+    int[] args = new Int[4]
+    args[0] = item.GetType()
+    args[1] = -1
+    args[2] = -1
+    args[3] = item.GetFormID()
+    ;if it is a weapon, we want its weapon type
+    if(args[0] == 41)
+        Weapon W = item as Weapon
+        int weaponType = W.GetWeaponType()
+            ;2H axes and maces have the same ID for some reason, so we have to differentiate them
+            if(weaponType == 7)
+                weaponType = 8
+            elseif(weaponType == 8)
+                weaponType = 10
+            endIf
+            if(weaponType == 6)
+                if(W.IsWarhammer())
+                weaponType = 7
+                endIf
+            endIf
+        args[1] = weaponType   
+    endIf       
+    return args
+endFunction
+
+
+;Fade in widget after button press 
+function fadeInWidget()
+    if(fadeOut)
+        SQM.FadeOut(SQM.Alpha, fadeInDuration/100.0)
+        waitsQueued += 1
+    endIf
+endFunction
+
+;Fade out the widget after the allotted time
+function fadeOutWidget()
+    if(fadeOut)
+        Utility.wait(fadeWait/100.0)
+        if(waitsQueued > 0)
+            waitsQueued -=1
+        endIf
+        ;only fade out if this is the last button pressed
+        if(!waitsQueued && fadeOut)
+            SQM.FadeOut(fadeAlpha, fadeOutDuration/100.0)
+        EndIf
+    EndIf
+endFunction
+
+Event OnKeyUp(Int KeyCode, Float HoldTime)
+	GotoState("PROCESSING")
+    int[] args
+	If KeyCode == SQM.getUP() && !Utility.IsInMenuMode()
+        fadeInWidget()
+		cyclePower()
+        args = GetItemIconArgs(2)
+		SQM.setUpStr(getCurrQItemName(2))
+		SQM.activateButton("up", _currQIndices[2], args)
+        fadeOutWidget()
+	elseIf KeyCode == SQM.getDOWN() && !Utility.IsInMenuMode()
+        fadeInWidget()
+		cycleItem()
+        args = GetItemIconArgs(3)
+		SQM.setDownStr(getCurrQItemName(3))
+		SQM.activateButton("down", _currQIndices[3], args)
+        fadeOutWidget()
+	elseIf KeyCode == SQM.getLEFT() && !Utility.IsInMenuMode()
+        fadeInWidget()
+		cycleHand(0)
+        args = GetItemIconArgs(0)
+
+		SQM.setLeftStr(getCurrQItemName(0))
+		SQM.activateButton("left", _currQIndices[0], args)
+        fadeOutWidget()
+	elseIf KeyCode == SQM.getRIGHT() && !Utility.IsInMenuMode()
+        fadeInWidget()
+		cycleHand(1)
+        args = GetItemIconArgs(1)
+
+		SQM.setRightStr(getCurrQItemName(1))
+		SQM.activateButton("right", _currQIndices[1], args)
+        fadeOutWidget()
+	elseIf KeyCode == SQM.getACTIVATE() && !Utility.IsInMenuMode()
+        fadeInWidget()
+		useEquippedItem()
+        fadeOutWidget()
+	EndIf
+	GotoState("")
+EndEvent
+
+;Disallow keys and group usage while processing
+state PROCESSING	
+	event OnKeyDown(int a_keyCode)
+	endEvent
+endState
+
+function cycleItem()
+	advanceQueue(3, 0)
+	int currIndex = _currQIndices[3]
+	Form item = _potionQueue[currIndex]
+	SQM.setPotionCount(PlayerRef.GetItemCount(item))
+endFunction
+
+;uses the equipped item / potion in the bottom slot
+function useEquippedItem()
+	int currIndex = _currQIndices[3]	
+	Form item = _potionQueue[currIndex]
+	if( item != None)
+		if(ValidateItem(item))
+			PlayerRef.EquipItem(item, false, false)
+		else
+			removeInvalidItem(3, currIndex)
+			Debug.Notification("You no longer have " + item.getName())
+		endIf
+	endIf
+	SQM.setPotionCount(PlayerRef.GetItemCount(item))
+endFunction
+
+;cycle the upper slot (shouts, powers)
+function cyclePower()	
+	;if no power is equipped OR a power is equipped that is not the same as the current power in the Queue, equip current queue power
+	;else, go to next power in the queue
+	int currIndex = _currQIndices[2]
+	shout currShout = PlayerRef.GetEquippedShout()
+    int type
+    ;If the currently equipped power is not a shout but a spell (power), there isn't a way to tell it is equipped,
+    ;so we have to advance the queue no matter what
+	if(currShout != _shoutQueue[currIndex] && _shoutQueue[currIndex] != None && _shoutQueue[currIndex].GetType() != 22)	
+        type = _shoutQueue[currIndex].GetType()
+        ;If it is a spell (power)
+        if( type == 22)
+            PlayerRef.EquipSpell(_shoutQueue[currIndex] as Spell, 2 )
+        elseIf(type == 119)
+            PlayerRef.EquipShout(_shoutQueue[currIndex] as Shout )
+        endIf
+
+	else
+		int newIndex = advanceQueue(2, 0);
+		;PlayerRef.EquipShout(_shoutQueue[newIndex] as shout)
+        type = _shoutQueue[newIndex].GetType()
+        if( type == 22)
+            PlayerRef.EquipSpell(_shoutQueue[newIndex] as Spell, 2 )
+        elseIf(type == 119)
+            PlayerRef.EquipShout(_shoutQueue[newIndex] as Shout )
+        endIf
+	endif
+endFunction
+
+;Unequips item in hand
+function UnequipHand(int a_hand)
+	int a_handEx = 1
+	if (a_hand == 0)
+		a_handEx = 2 ; unequipspell and *ItemEx need different hand args
+	endIf
+
+	Form handItem = PlayerRef.GetEquippedObject(a_hand)
+	if (handItem)
+		int itemType = handItem.GetType()
+		if (itemType == 22)
+			PlayerRef.UnequipSpell(handItem as Spell, a_hand)
+		else
+			PlayerRef.UnequipItemEx(handItem, a_handEx)
+		endIf
+	endIf
+endFunction
+
+bool function cycleHand(int slotID)
+
+	Form[] queue;
+;	int[] queueIds;
+	int equipSlotId
+	int currIndex = _currQIndices[slotID]
+
+	;for some reason, when using Unequip, 0 corresponds to the left hand, but when using equip, 2 corresponds to the left hand,
+	;so we have to change the value for the left hand here	
+	if(slotID == 0)
+		queue = _leftHandQueue
+		equipSlotId = 2	
+	elseif (slotID == 1)
+		queue = _rightHandQueue
+		equipSlotId = 1
+	endif
+
+	;First, we check to see if the currently equipped item is the same as the current item in the queue.  
+	;If it is, advance the queue. Else, equip the current item in the queue	
+	Form currEquippedItem = PlayerRef.GetEquippedObject(slotID)
+	Form currQItem = queue[currIndex]
+	if(currEquippedItem != currQItem && currQItem != None)
+		if(ValidateItem(currQItem))
+			UnequipHand(slotID)
+			if(currQItem.getType() == 22)					
+				PlayerRef.EquipSpell(currQItem as Spell, slotID)
+			else
+				PlayerRef.EquipItemEx(currQItem, equipSlotId, false, false)
+			endIf
+			return true
+		else
+			removeInvalidItem(slotID, currIndex)
+		endIf
+		;if item fails validation or curr equipped item check, move to next item in queue
+	endIf	
+		
+	int newIndex = advanceQueue(slotID, 0)
+	Form nextQItem = queue[newIndex]
+	if(ValidateItem(nextQItem))
+		UnequipHand(slotID)
+		if(nextQItem.getType() == 22)
+			PlayerRef.EquipSpell(nextQItem as Spell, slotID)
+		else
+			PlayerRef.EquipItemEx(nextQItem, equipSlotId, false, false)
+		endif
+		return true
+	else
+		removeInvalidItem(slotID, newIndex)
+	endIf
+	return false
+endFunction
+
+;moves the queue to the next slot
+int function advanceQueue(int queueID, int depth)
+	int currIndex = _currQIndices[queueID]
+	int newIndex
+	if (currIndex == MAX_QUEUE_SIZE - 1)
+		newIndex = 0	
+	else
+		newIndex = currIndex + 1	
+	endIf
+	_currQIndices[queueID] = newIndex
+	;Recursively advance until there is an item in the queue or the entire length of the queue has been traversed
+	if(!ValidateSlot(queueID) && depth < MAX_QUEUE_SIZE)
+		newIndex = advanceQueue(queueID, depth + 1)
+	endIf
+	SQM.updateQueueIcon(newIndex)
+	return newIndex
+endFunction
+
+;makes sure whatever is in the current slot is equippable.
+bool function ValidateSlot(int queueID)
+	int currIndex = _currQIndices[queueID]
+	if queueID == 0
+		if _leftHandQueue[currIndex] == None || !ValidateItem(_leftHandQueue[currIndex])
+			return false
+		endIf
+	elseif queueID == 1 
+		if _rightHandQueue[currIndex] == None || !ValidateItem(_rightHandQueue[currIndex])
+			return false
+		endIf
+	elseif queueId == 2
+		if _shoutQueue[currIndex] == None || !ValidateItem(_shoutQueue[currIndex])
+			return false
+		endIf
+	elseif queueId == 3 
+		if _potionQueue[currIndex] == None || !ValidateItem(_potionQueue[currIndex])
+			return false	
+		endIf
+	endIf
+	return true 
+endFunction
+
+;--------------------------------------------------------------------------------------------------------------------
+;Method taken directly from SKI_FavoritesManager.psc from the SkyUI team.  All credit to them.  Thank you!
+;--------------------------------------------------------------------------------------------------------------------
+;make sure the player has the item or spell and it is favorited
+bool function ValidateItem(Form a_item)
+	int a_itemType = a_item.GetType()	
+
+	if (a_item == None)
+		return false
+	endif
+	; This is a Spell or Shout and can't be counted like an item
+	if (a_itemType == 22 || a_itemType == 119)
+		return PlayerRef.HasSpell(a_item)
+	; This is an inventory item
+	else 
+		if (!(PlayerRef.GetItemCount(a_item) > 0))
+			Debug.Notification("You no longer have " + a_item.getName())
+			return false
+		endIf
+	endIf
+	;This item is already equipped, possibly in the other hand
+	if (a_item == PlayerRef.GetEquippedObject(0) || a_item == PlayerRef.GetEquippedObject(1))
+		return false
+	endif
+	return true
+endFunction
+
+;if an item fails validation, remove it from the queue
+function removeInvalidItem(int queueID, int index)
+
+	if(queueID == 0)
+		_leftHandQueue[index] = None
+	elseif(queueID == 1)
+		_rightHandQueue[index] = None
+	elseif(queueID == 2)
+		_shoutQueue[index] = None
+	elseif(queueID == 3)
+		_potionQueue[index] = None
+	endIf
+
+endFunction
+
+;Getters for the widget script
+String function getCurrQItemName(int queueID)
+	int currIndex = _currQIndices[queueID]
+
+	if(queueID == 0)
+		return	_leftHandQueue[currIndex].getName()
+	elseif(queueID == 1)
+		return _rightHandQueue[currIndex].getName()
+	elseif(queueID == 2)
+		return _shoutQueue[currIndex].getName()
+	elseif(queueID == 3)
+		return _potionQueue[currIndex].getName()
+	endIf
+	return ""
+endFunction 
+
+;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+;MCM events 
+;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+
+int function GetVersion()
+    return 3 ; version 1.11
+endFunction
+
+event OnVersionUpdate(int a_version)
+    Debug.Notification("Updating V1.11")
+    waitsQueued = 0   
+endEvent 
+
+function EmptyLists()
+    int ndx = 0
+    while ndx < 128
+        _potionListName[ndx] = ""
+        _shoutListName[ndx] = ""
+        _rightHandListName[ndx] = ""
+        _leftHandListName[ndx] = ""
+        _potionList[ndx] = None
+        _shoutsKnown[ndx] = None
+        _rightHandList[ndx] = None
+
+
+        _leftHandList[ndx] = None
+        ndx +=1
+    endWhile
+endFunction
+;initialize variables and arrays when the MCM is started up
+Event OnConfigInit()
+	;these are the names of the pages that appear in the MCM
+	Pages = new String[5]
+	Pages[0] = "General"
+	Pages[1] = "Shout Group"
+	Pages[2] = "Item Group"
+	Pages[3] = "Left Hand Group"
+	Pages[4] = "Right Hand Group"
+    waitsQueued = 0
+	_currQIndices = new int[4]
+
+    _voiceSpells = new Spell[128]
+	;128 is the limit on the combo boxes in MCM
+	_potionListName = new string[128]
+	_shoutListName = new string[128]
+	_rightHandListName = new string[128]
+	_leftHandListName = new string[128]
+
+	_potionList = new Form[128]
+	_shoutsKnown = new Form[128]
+	_rightHandList = new Form[128]
+	_leftHandList = new Form[128]
+
+	_potionQueue = new Form[10]
+	_shoutQueue = new Form[10]
+	_rightHandQueue = new Form[10]
+	_leftHandQueue = new Form[10]
+
+  ;  _potionIndexMap = new Int[128]
+  ;  _shoutIndexMap = new Int[128]
+  ;  _rightHandIndexMap = new Int[128]
+  ;  _leftHandIndexMap = new Int[128]
+  ;  Int i = 0
+  ;  while i < 128
+  ;      _potionIndexMap[i] = i 
+  ;      _shoutIndexMap[i] = i 
+  ;      _rightHandIndexMap[i] = i 
+  ;      _leftHandIndexMap[i] = i
+  ;      i+=1
+  ;  endWhile
+        
+	;initialize inventory lists for the combo boxes
+	populateLists(PlayerRef)
+
+	;initialize the indices of each of the 7 slots for each equipslot
+	topIndex = new Int[10]
+	bottomIndex = new Int[10]
+	leftIndex = new Int[10]
+	rightIndex = new Int[10]
+
+	;initialize Object ID's for the different combo boxes
+	topArrayOID = new Int[7]
+	bottomArrayOID = new Int[7]
+	leftArrayOID = new Int[7]
+	rightArrayOID = new Int[7]
+
+	RegisterForKey(SQM.getUP())
+	RegisterForKey(SQM.getDOWN())
+	RegisterForKey(SQM.getLEFT())
+	RegisterForKey(SQM.getRIGHT())
+	RegisterForKey(SQM.getACTIVATE())
+
+	;Initializing widget strings
+	SQM.setUpStr(getCurrQItemName(2))
+	SQM.setDownStr(getCurrQItemName(3))
+	SQM.setLeftStr(getCurrQItemName(0))
+	SQM.setRightStr(getCurrQItemName(1))
+EndEvent
+
+;called every time a page is initialized
+event OnPageReset(string page)
+    SetCursorFillMode(TOP_TO_BOTTOM)
+
+	;first page
+    If (page == "General")
+	    AddHeaderOption("HUD Settings")
+	    visOID = AddToggleOption("Visibility On/Off", visVal)
+	    transOID = AddSliderOption("Opacity", SQM.Alpha, "{0}%")
+        mustBeFavoritedOID = AddToggleOption("Only Favorite Items", mustBeFavorited)
+        
+
+	    xOID = AddSliderOption("X", SQM.X, "{0}")
+	    yOID = AddSliderOption("Y", SQM.Y, "{0}")
+        scaleOID = AddSliderOption("Scale", SQM.mainScale, "{0}%")
+
+        fadeOID = AddToggleOption("Fade Out On/Off", fadeOut)
+        fadeAlphaOID = AddSliderOption("Fade Out Alpha", fadeAlpha, "{0}%")
+        fadeOutDurationOID = AddSliderOption("Fade Out Duration", fadeOutDuration, "{0}")
+        fadeInDurationOID = AddSliderOption("Fade In Duration", fadeInDuration, "{0}")
+        fadeWaitOID = AddSliderOption("Fade Wait Duration", fadeWait, "{0}")
+        if(!fadeOut)
+            SetOptionFlags(fadeAlphaOID, OPTION_FLAG_DISABLED)
+            SetOptionFlags(fadeOutDurationOID, OPTION_FLAG_DISABLED)
+            SetOptionFlags(fadeInDurationOID, OPTION_FLAG_DISABLED)
+            SetOptionFlags(fadeWaitOID, OPTION_FLAG_DISABLED)
+        else
+            SetOptionFlags(fadeAlphaOID, OPTION_FLAG_NONE)
+            SetOptionFlags(fadeOutDurationOID, OPTION_FLAG_NONE)
+            SetOptionFlags(fadeInDurationOID, OPTION_FLAG_NONE)
+            SetOptionFlags(fadeWaitOID, OPTION_FLAG_NONE)
+        endIf
+		;move cursor to top right position
+	    SetCursorPosition(1)
+
+	    AddHeaderOption("Key Bindings")
+	    keyOID_UP = AddKeyMapOption("Cycle Upper Slot", upKey, OPTION_FLAG_WITH_UNMAP)
+	    keyOID_DOWN = AddKeyMapOption("Cycle Lower Slot", downKey, OPTION_FLAG_WITH_UNMAP)
+	    keyOID_LEFT = AddKeyMapOption("Cycle Left Slot", leftKey, OPTION_FLAG_WITH_UNMAP)
+	    keyOID_RIGHT = AddKeyMapOption("Cycle Right Slot", rightKey, OPTION_FLAG_WITH_UNMAP)
+	    keyOID_ACTIVATE = AddKeyMapOption("Consume Item/Potion", activateKey, OPTION_FLAG_WITH_UNMAP)
+    ;Shout page
+    elseIf (page == pages[1])
+        AddHeaderOption(pages[1])
+		int ndx = 0
+		while ndx < MAX_QUEUE_SIZE 
+			topArrayOID[ndx] = AddMenuOption("Slot " + (ndx + 1), _shoutQueue[ndx].getName())
+			ndx += 1
+		endWhile
+		refreshOID = AddTextOption("Refresh Inventory Items", "") 
+	;Potion page
+    elseIf (page == pages[2])
+        AddHeaderOption(pages[2])
+		int ndx = 0
+		while ndx < MAX_QUEUE_SIZE
+			bottomArrayOID[ndx] = AddMenuOption("Slot " + (ndx + 1), _potionQueue[ndx].getName())
+			ndx += 1
+		endWhile
+		refreshOID = AddTextOption("Refresh Inventory Items", "")
+	;Left Hand page
+    elseIf (page == pages[3])
+        AddHeaderOption(pages[3])
+		int ndx = 0
+		while ndx < MAX_QUEUE_SIZE
+			leftArrayOID[ndx] = AddMenuOption("Slot " + (ndx + 1), _leftHandQueue[ndx].getName())
+			ndx += 1
+		endWhile
+		refreshOID = AddTextOption("Refresh Inventory Items", "")
+	;Right Hand page
+    elseIf (page == pages[4])
+        AddHeaderOption(pages[4])
+		int ndx = 0
+		while ndx < MAX_QUEUE_SIZE
+			rightArrayOID[ndx] = AddMenuOption("Slot " + (ndx + 1), _rightHandQueue[ndx].getName())
+			ndx += 1
+		endWhile
+		refreshOID = AddTextOption("Refresh Inventory Items", "")
+    endIf
+endEvent
+;function mapOnlyFavorites
+;endFunction
+;called when checkbox option is selected
+event OnOptionSelect(int option)
+    if (option == visOID)
+        visVal = !visVal
+		SQM.isVisible = !SQM.isVisible
+		SetToggleOptionValue(visOID, SQM.isVisible)
+    elseIf(option == mustBeFavoritedOID)
+        mustBeFavorited = !mustBeFavorited
+        SetToggleOptionValue(mustBeFavoritedOID, mustBeFavorited)
+    elseIf (option == refreshOID)
+        SetTextOptionValue(refreshOID, "Updating...")
+        populateLists(PlayerRef)
+        SetTextOptionValue(refreshOID, "")
+    elseIf (option == fadeOID)
+        fadeOut = !fadeOut
+        SetToggleOptionValue(fadeOID, fadeOut)
+        if(!fadeOut)
+            SQM.setTransparency(SQM.Alpha)
+            SetOptionFlags(fadeAlphaOID, OPTION_FLAG_DISABLED)
+            SetOptionFlags(fadeOutDurationOID, OPTION_FLAG_DISABLED)
+            SetOptionFlags(fadeInDurationOID, OPTION_FLAG_DISABLED)
+            SetOptionFlags(fadeWaitOID, OPTION_FLAG_DISABLED)
+        else
+            SQM.FadeOut(fadeAlpha, fadeOutDuration/100.0)
+            SetOptionFlags(fadeAlphaOID, OPTION_FLAG_NONE)
+            SetOptionFlags(fadeOutDurationOID, OPTION_FLAG_NONE)
+            SetOptionFlags(fadeInDurationOID, OPTION_FLAG_NONE)
+            SetOptionFlags(fadeWaitOID, OPTION_FLAG_NONE)
+        endIf
+    endIf
+endEvent
+
+;set the default options when the 'R' key is pressed
+;this is not implemented for the inventory items
+event OnOptionDefault(int option)
+    If (option == visOID)
+        visVal = true ; default value
+        SetToggleOptionValue(visOID, visVal)
+    elseIf (option == transOID)
+        transVal = 100.0 ; default value
+        SetSliderOptionValue(transOID, transVal, "{0}%")
+    elseIf (option == keyOID_UP)
+        upKey = 45 ; default value
+        SetKeyMapOptionValue(keyOID_UP, upKey)
+    elseIf (option == keyOID_DOWN)
+        downKey = 21 ; default value
+        SetKeyMapOptionValue(keyOID_DOWN, downKey)
+    elseIf (option == keyOID_LEFT)
+        leftKey = 47 ; default value
+        SetKeyMapOptionValue(keyOID_LEFT, leftKey)
+    elseIf (option == keyOID_RIGHT)
+        rightKey = 48 ; default value
+        SetKeyMapOptionValue(keyOID_RIGHT, rightKey)
+    elseIf (option == keyOID_ACTIVATE)
+        activateKey = 34 ; default value
+        SetKeyMapOptionValue(keyOID_ACTIVATE, activateKey)
+    elseIf (option == xOID)
+        SQM.setX(10.0)
+        SetSliderOptionValue(option, SQM.X, "{0}")
+    elseIf (option == yOID)
+        SQM.setY(300.0)
+        SetSliderOptionValue(option, SQM.Y, "{0}")
+    elseIf (option == scaleOID)
+        SQM.setScale(100.0)
+        SetSliderOptionValue(option, SQM.mainScale, "{0}")
+    endIf
+endEvent
+
+;called when the slider menus appear
+event OnOptionSliderOpen(int option)
+	;transparency slider
+	If (option == transOID)
+		SetSliderDialogStartValue(SQM.Alpha)
+		SetSliderDialogDefaultValue(100.0)
+		SetSliderDialogRange(0.0, 100.0)
+		SetSliderDialogInterval(1.00)
+    ;x position slider
+	elseIf (option == xOID)
+		SetSliderDialogStartValue(SQM.X)
+		SetSliderDialogRange(0.00, 1280.00)
+		SetSliderDialogInterval(1.00)
+		SetSliderDialogDefaultValue(10.00)
+	;y position slider
+	elseIf (option == yOID)
+		SetSliderDialogStartValue(SQM.Y)
+		SetSliderDialogRange(0.00, 720.00)
+		SetSliderDialogInterval(1.00)
+		SetSliderDialogDefaultValue(300.00)
+    elseIf (option == scaleOID)
+        SetSliderDialogStartValue(SQM.mainScale)
+		SetSliderDialogRange(0.00, 120.00)
+		SetSliderDialogInterval(1.00)
+		SetSliderDialogDefaultValue(100.00)
+    elseIf (option == fadeAlphaOID)
+        SetSliderDialogStartValue(fadeAlpha)
+		SetSliderDialogRange(0.00, 100.00)
+		SetSliderDialogInterval(1.00)
+		SetSliderDialogDefaultValue(0.00)
+    elseIf (option == fadeOutDurationOID)
+        SetSliderDialogStartValue(fadeOutDuration)
+		SetSliderDialogRange(0.00, 500.00)
+		SetSliderDialogInterval(5)
+		SetSliderDialogDefaultValue(200.00)
+    elseIf (option == fadeInDurationOID)
+        SetSliderDialogStartValue(fadeInDuration)
+		SetSliderDialogRange(0.00, 100.00)
+		SetSliderDialogInterval(1)
+		SetSliderDialogDefaultValue(30) 
+    elseIf (option == fadeWaitOID)
+        SetSliderDialogStartValue(fadeWait)
+		SetSliderDialogRange(0.00, 3000.00)
+		SetSliderDialogInterval(50)
+		SetSliderDialogDefaultValue(500) 
+	endIf
+endEvent
+
+;called when the slider menu is accepted
+event OnOptionSliderAccept(int option, float value)
+	;transparency slider
+    if (option == transOID)
+        SQM.setTransparency(value)
+		SetSliderOptionValue(transOID, SQM.Alpha, "{0}%")
+	;x position slider
+    elseIf (option == xOID)
+		SQM.setX(value)
+		SetSliderOptionValue(option, SQM.X, "{0}")
+	;y position slider
+    elseIf (option == yOID)
+		SQM.setY(value)
+		SetSliderOptionValue(option, SQM.Y, "{0}")
+    elseIf (option == scaleOID)
+		SQM.setScale(value)
+		SetSliderOptionValue(option, SQM.mainScale, "{0}%")
+    elseIf (option == fadeAlphaOID)
+        fadeAlpha =  value
+        SetSliderOptionValue(option,fadeAlpha, "{0}%")
+    elseIf (option == fadeOutDurationOID)
+        fadeOutDuration = value
+        SetSliderOptionValue(option,fadeOutDuration, "{0}")
+    elseIf (option == fadeInDurationOID)
+        fadeInDuration = value
+        SetSliderOptionValue(option,fadeInDuration, "{0}")
+    elseIf (option == fadeWaitOID)
+        fadeWait = value
+        SetSliderOptionValue(option,fadeWait, "{0}")
+
+    endIf
+endEvent
+
+;called when an MCM menu item is highlighted
+event OnOptionHighlight(int option)
+	;visibility
+    If (option == visOID)
+        SetInfoText("Check this option to toggle the visibility of the HUD\nDefault: true")
+
+    elseIf (option == refreshOID)
+        SetInfoText("Refreshes lists to show recently acquired items.  This will refresh all lists, so you don't need to do it for each queue.")
+    ;transparency
+    elseIf (option == transOID)
+        SetInfoText("Click this option to adjust the HUD transparency\nDefault: 100.0")
+    ;keyUp
+    elseIf (option == keyOID_UP)
+        SetInfoText("Select to bind key to cycle the shout slot\nDefault: X")
+
+    ;keyDown
+    elseIf (option == keyOID_DOWN)
+        SetInfoText("Select to bind key to cycle the potion slot\nDefault: Y\nSuggested: F, but you should first unassign F from 'Toggle POV' in the Controls Menu")
+
+    ;keyLeft
+    elseIf (option == keyOID_LEFT)
+        SetInfoText("Select to bind key to left hand slot\nDefault: V\nSuggested: C, but you should first unassign C from 'Auto-move' in the Controls Menu")
+
+    ;keyRight
+    elseIf (option == keyOID_RIGHT)
+        SetInfoText("Select to bind key to right hand slot\nDefault: B\nSuggested: V")
+
+    ;keyActivate
+    elseIf (option == keyOID_ACTIVATE)
+        SetInfoText("Select to bind key to the consume item function\nDefault: G\nSuggested: L-SHIFT, but you should first unassign L-SHIFT from 'Run' in the Controls Menu")
+    ;x position slider
+    elseIf (option == xOID)
+        SetInfoText("Change x location\nDefault: 0.0")
+    ;y position slider
+    elseIf (option == yOID)
+        SetInfoText("Change y location\nDefault: 300.0")
+    elseIf (option == mustBeFavoritedOID)
+        SetInfoText("Only favorited items and spells will show up in the item group menus.  You may want to select this if you have a very large inventory. You will need to refresh your inventory items for the changes to take effect.")
+    elseIf(option == fadeOID)
+        SetInfoText("The widget will fade out of view when not in use")
+    elseIf(option == fadeAlphaOID)
+        SetInfoText("The alpha value to which the widget will fade after the allotted time.")
+    elseIf(option == fadeOutDurationOID)
+        SetInfoText("The amount of time (in centiseconds) it will take the widget to fade from visible to its faded alpha value.")
+    elseIf(option == fadeInDurationOID)
+        SetInfoText("The amount of time (in centiseconds) it will take the widget to fade into view after a key is pressed.")
+    elseIf(option == fadeWaitOID)
+        SetInfoText("The amount of time (in centiseconds) the widget will wait after the last key is pressed to begin fading.")
+    endIf
+endEvent
+
+;called when a key map box is changed
+event OnOptionKeyMapChange(int option, int keyCode, string conflictControl, string conflictName)
+    If (option == keyOID_UP)
+        upKey = keyCode
+        SetKeyMapOptionValue(keyOID_UP, upKey)
+        UnregisterForKey(SQM.getUP())
+        SQM.setUP(keyCode)
+        RegisterForKey(SQM.getUP())
+    elseIf (option == keyOID_DOWN)
+        downKey = keyCode
+        SetKeyMapOptionValue(keyOID_DOWN, downKey)
+        UnregisterForKey(SQM.getDOWN())
+        SQM.setDOWN(keyCode)
+        RegisterForKey(SQM.getDOWN())
+    elseIf (option == keyOID_LEFT)
+        leftKey = keyCode
+        SetKeyMapOptionValue(keyOID_LEFT, leftKey)
+        UnregisterForKey(SQM.getLEFT())
+        SQM.setLEFT(keyCode)
+        RegisterForKey(SQM.getLEFT())
+    elseIf (option == keyOID_RIGHT)
+        rightKey = keyCode
+        SetKeyMapOptionValue(keyOID_RIGHT, rightKey)
+        UnregisterForKey(SQM.getRIGHT())
+        SQM.setRIGHT(keyCode)
+        RegisterForKey(SQM.getRIGHT())
+    elseIf (option == keyOID_ACTIVATE)
+        activateKey = keyCode
+        SetKeyMapOptionValue(keyOID_ACTIVATE, activateKey)
+        UnregisterForKey(SQM.getACTIVATE())
+        SQM.setACTIVATE(keyCode)
+        RegisterForKey(SQM.getACTIVATE())
+    endIf
+endEvent
+
+;called when the drop down menu is opened for selecting queue items
+event OnOptionMenuOpen(int option)
+	Int iElement = 0
+	While iElement < topArrayOID.Length
+		If (option == topArrayOID[iElement])
+	      		SetMenuDialogOptions(_shoutListName)
+          		SetMenuDialogStartIndex(topIndex[iElement])
+        		SetMenuDialogDefaultIndex(0)
+		endIf
+		iElement += 1
+	endWhile
+
+	iElement = 0
+	While iElement < bottomArrayOID.Length
+		If (option == bottomArrayOID[iElement])
+	      		SetMenuDialogOptions(_potionListName)
+          		SetMenuDialogStartIndex(bottomIndex[iElement])
+        		SetMenuDialogDefaultIndex(0)
+		endIf
+		iElement += 1
+	endWhile
+
+	iElement = 0
+	While iElement < leftArrayOID.Length
+		If (option == leftArrayOID[iElement])
+	      		SetMenuDialogOptions(_leftHandListName)
+          		SetMenuDialogStartIndex(leftIndex[iElement])
+        		SetMenuDialogDefaultIndex(0)
+		endIf
+		iElement += 1
+	endWhile
+
+	iElement = 0
+	While iElement < rightArrayOID.Length
+		If (option == rightArrayOID[iElement])
+	      		SetMenuDialogOptions(_rightHandListName)
+          		SetMenuDialogStartIndex(rightIndex[iElement])
+        		SetMenuDialogDefaultIndex(0)
+		endIf
+		iElement += 1
+	endWhile
+
+endEvent
+
+;called when a combo box option is selected
+event OnOptionMenuAccept(int option, int index)
+
+	Int iElement = 0
+	While iElement < topArrayOID.Length
+		If (option == topArrayOID[iElement])
+			_shoutQueue[iElement] = _shoutsKnown[index]
+            topIndex[iElement] = index
+            SetMenuOptionValue(topArrayOID[iElement], _shoutQueue[iElement].getName())
+		endIf
+		iElement += 1
+	endWhile
+
+	iElement = 0
+	While iElement < bottomArrayOID.Length
+		If (option == bottomArrayOID[iElement])
+			_potionQueue[iElement] = _potionList[index]
+            bottomIndex[iElement] = index
+            SetMenuOptionValue(bottomArrayOID[iElement], _potionQueue[iElement].getName())
+		endIf
+		iElement += 1
+	endWhile
+
+	iElement = 0
+	While iElement < leftArrayOID.Length
+		If (option == leftArrayOID[iElement])
+			_leftHandQueue[iElement] = _leftHandList[index]
+            leftIndex[iElement] = index
+            SetMenuOptionValue(leftArrayOID[iElement], _leftHandQueue[iElement].getName())
+		endIf
+		iElement += 1
+	endWhile
+
+	iElement = 0
+	While iElement < rightArrayOID.Length
+		If (option == rightArrayOID[iElement])
+			_rightHandQueue[iElement] = _rightHandList[index]
+            rightIndex[iElement] = index
+            SetMenuOptionValue(rightArrayOID[iElement], _rightHandQueue[iElement].getName())
+		endIf
+		iElement += 1
+	endWhile
+
+endEvent
+;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+;END MENU WIDGET CODE
+;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
