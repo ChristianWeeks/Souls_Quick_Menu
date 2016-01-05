@@ -1,0 +1,13 @@
+#ignore everything
+*
+
+#Except
+!/Interface/exported/widgets/soulsQuickMenu/SQMWidget.swf
+!Souls_Quick_Menu.esp
+!scripts/SQM_ManagerScript.pex
+!scripts/SQM_MenuScript.pex
+!scripts/SQM_WidgetScript.pex
+!scripts/Source/SQM_ManagerScript.psc
+!scripts/Source/SQM_MenuScript.psc
+!scripts/Source/SQM_WidgetScript.psc
+!README.md
