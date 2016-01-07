@@ -36,6 +36,7 @@ float fadeInDuration = 15.0
 float fadeWait = 500.0
 ;Used to control fading out when many buttons are pressed
 int waitsQueued
+bool ASSIGNMENT_MODE = false 
 
 ;toggle visibility box, transparency slider, and refresh button
 int visOID
@@ -44,6 +45,7 @@ int refreshOID
 ;If this is toggled, only favorited items will show up in the MCM menu
 int mustBeFavoritedOID
 bool mustBeFavorited = false
+int assignEquippedOID
 
 ;array of object id's for each item queue (MCM menu)
 int[] topArrayOID
@@ -57,7 +59,9 @@ int keyOID_DOWN
 int keyOID_LEFT
 int keyOID_RIGHT
 int keyOID_ACTIVATE
-
+int keyOID_ASSIGNLEFT
+int keyOID_ASSIGNRIGHT
+int keyOID_ASSIGNSHOUT
 ;-------------------------------------------------------------------------
 ;Global variables 
 ;-------------------------------------------------------------------------
@@ -69,17 +73,17 @@ string[]	 _shoutListName
 string[]	 _rightHandListName
 string[]	 _leftHandListName 
 
-;These contain the full list of items the player can choose from in the MCM menu
-Form[]		 _potionList
-Form[]		 _shoutsKnown
-Form[]		 _rightHandList 
-Form[]		 _leftHandList 
-
 ;these contain the objects for the final queues the user decides upon
 Form[]		 _potionQueue
 Form[]		 _shoutQueue
 Form[]		 _rightHandQueue 
 Form[]		 _leftHandQueue 
+
+;These contain the full list of items the player can choose from in the MCM menu
+Form[]		 _potionList
+Form[]		 _shoutsKnown
+Form[]		 _rightHandList 
+Form[]		 _leftHandList 
 
 ;contain indexes of items in their lists
 int[]       _potionIndexMap
@@ -103,6 +107,10 @@ int downKey = 21		; Y
 int leftKey = 47		; V
 int rightKey = 48		; B
 int activateKey = 34	; G
+
+int assignLeftKey = 59  ;Num7
+int assignRightKey = 60 ;Num8
+int assignShoutKey = 61 ;Num9
 
 int MAX_QUEUE_SIZE = 7
 
@@ -169,36 +177,42 @@ Function populateLists(ObjectReference akContainer)
 	Int nextRHIndex = 1
 	Int nextLHIndex = 1
 	Int itemCount = 0
+    String itemStr 
     SetTextOptionValue(refreshOID, "Updating Items")
 	;iterate through all items in player's inventory
 	While ndx < akContainer.GetNumItems()
 		Form kForm = akContainer.GetNthForm(ndx)
         ;if it must be favorited, make sure it is. else proceed 
 		if(!mustBeFavorited || (mustBeFavorited && Game.isObjectFavorited(kForm)))
+            itemCount = PlayerRef.getItemCount(kForm)
+            itemStr = ""
+            if(itemCount > 1 && kForm.GetType() == 41)
+                itemStr = " [" + itemCount + "]"   
+                Debug.MessageBox(kForm + kForm.GetName())
+            endIf
 			If kForm.GetType() == 46 ; is a potion
-                itemCount = PlayerRef.getItemCount(kForm)
 				_potionListName[nextPotionIndex] = kForm.getName() + "  (" + itemCount + ")"
 				_potionList[nextPotionIndex] = kForm
 				nextPotionIndex += 1
 			elseIf kForm.GetType() == 41 ; is a weapon
 				;only add 2 handers and ranged to RH slot
 				if((kForm as weapon).GetWeapontype() > 4)
-					_rightHandListName[nextRHIndex] = kForm.getName()
+					_rightHandListName[nextRHIndex] = kForm.getName() + itemStr
 					_rightHandList[nextRHIndex] = kForm
 					nextRHIndex += 1
 				else
 				    ;1h weapons go in both
-					_rightHandListName[nextRHIndex] = kForm.getName()
+					_rightHandListName[nextRHIndex] = kForm.getName() + itemStr
 					_rightHandList[nextRHIndex] = kForm
 					nextRHIndex += 1
 					;adding to LH queue
-					_leftHandListName[nextLHIndex] = kForm.getName()
+					_leftHandListName[nextLHIndex] = kForm.getName() + itemStr
 					_leftHandList[nextLHIndex] = kForm
 					nextLHIndex += 1
 				endif
 			;add shields to the lefthand queue
 			elseIf (kForm.GetType() == 26 && (kForm as Armor).GetSlotMask() == 512)
-				_leftHandListName[nextLHIndex] = kForm.getName()
+				_leftHandListName[nextLHIndex] = kForm.getName() + itemStr
 				_leftHandList[nextLHIndex] = kForm
 				nextLHIndex += 1
 			;Light (Torch)
@@ -400,9 +414,7 @@ Function populateShoutList()
 			nextShoutIndex += 1
 		endIf
 		ndx += 1
-	endWhile
-        
-         
+	endWhile 
 endFunction
 
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -480,7 +492,7 @@ Event OnKeyUp(Int KeyCode, Float HoldTime)
         fadeOutWidget()
 	elseIf KeyCode == SQM.getDOWN() && !Utility.IsInMenuMode()
         fadeInWidget()
-		cycleItem()
+		cyclePotion()
         args = GetItemIconArgs(3)
 		SQM.setDownStr(getCurrQItemName(3))
 		SQM.activateButton("down", _currQIndices[3], args)
@@ -489,7 +501,6 @@ Event OnKeyUp(Int KeyCode, Float HoldTime)
         fadeInWidget()
 		cycleHand(0)
         args = GetItemIconArgs(0)
-
 		SQM.setLeftStr(getCurrQItemName(0))
 		SQM.activateButton("left", _currQIndices[0], args)
         fadeOutWidget()
@@ -497,13 +508,33 @@ Event OnKeyUp(Int KeyCode, Float HoldTime)
         fadeInWidget()
 		cycleHand(1)
         args = GetItemIconArgs(1)
-
 		SQM.setRightStr(getCurrQItemName(1))
 		SQM.activateButton("right", _currQIndices[1], args)
         fadeOutWidget()
 	elseIf KeyCode == SQM.getACTIVATE() && !Utility.IsInMenuMode()
         fadeInWidget()
 		useEquippedItem()
+        fadeOutWidget()
+    elseIf KeyCode == assignLeftKey && !Utility.IsInMenuMode()
+        fadeInWidget()
+        AssignCurrEquippedItem(0)
+        args = GetItemIconArgs(0)
+		SQM.setLeftStr(getCurrQItemName(0))
+		SQM.activateButton("left", _currQIndices[0], args)
+        fadeOutWidget()
+    elseIf KeyCode == assignRightKey && !Utility.IsInMenuMode()
+        fadeInWidget()
+        AssignCurrEquippedItem(1)
+        args = GetItemIconArgs(1)
+		SQM.setRightStr(getCurrQItemName(1))
+		SQM.activateButton("right", _currQIndices[1], args)
+        fadeOutWidget()
+    elseIf KeyCode == assignShoutKey && !Utility.IsInMenuMode()
+        fadeInWidget()
+        AssignCurrEquippedItem(2)
+        args = GetItemIconArgs(2)
+		SQM.setUpStr(getCurrQItemName(2))
+		SQM.activateButton("up", _currQIndices[2], args)
         fadeOutWidget()
 	EndIf
 	GotoState("")
@@ -515,7 +546,7 @@ state PROCESSING
 	endEvent
 endState
 
-function cycleItem()
+function cyclePotion()
 	advanceQueue(3, 0)
 	int currIndex = _currQIndices[3]
 	Form item = _potionQueue[currIndex]
@@ -586,9 +617,7 @@ function UnequipHand(int a_hand)
 endFunction
 
 bool function cycleHand(int slotID)
-
-	Form[] queue;
-;	int[] queueIds;
+	Form[] queue
 	int equipSlotId
 	int currIndex = _currQIndices[slotID]
 
@@ -683,7 +712,8 @@ endFunction
 ;--------------------------------------------------------------------------------------------------------------------
 ;make sure the player has the item or spell and it is favorited
 bool function ValidateItem(Form a_item)
-	int a_itemType = a_item.GetType()	
+	int a_itemType = a_item.GetType()
+    int itemCount 
 
 	if (a_item == None)
 		return false
@@ -693,13 +723,14 @@ bool function ValidateItem(Form a_item)
 		return PlayerRef.HasSpell(a_item)
 	; This is an inventory item
 	else 
-		if (!(PlayerRef.GetItemCount(a_item) > 0))
+        itemCount = PlayerRef.GetItemCount(a_item)
+		if (itemCount < 1)
 			Debug.Notification("You no longer have " + a_item.getName())
 			return false
 		endIf
 	endIf
-	;This item is already equipped, possibly in the other hand
-	if (a_item == PlayerRef.GetEquippedObject(0) || a_item == PlayerRef.GetEquippedObject(1))
+	;This item is already equipped, possibly in the other hand, and there is only 1 of it
+	if ((a_item == PlayerRef.GetEquippedObject(0) || a_item == PlayerRef.GetEquippedObject(1)) && itemCount < 2)
 		return false
 	endif
 	return true
@@ -736,6 +767,20 @@ String function getCurrQItemName(int queueID)
 	return ""
 endFunction 
 
+function AssignCurrEquippedItem(Int aiSlot)
+    Form obj = PlayerRef.GetEquippedObject(aiSlot)
+    int ndx = _currQIndices[aiSlot]
+    if(aiSlot == 0)
+        _leftHandQueue[ndx] = obj 
+    elseif(aiSlot == 1)
+        _rightHandQueue[ndx] = obj 
+    elseif(aiSlot == 2)
+        _shoutQueue[ndx] = obj 
+    endIf
+
+    ;Debug.MessageBox(obj.GetName())
+
+endFunction
 ;-----------------------------------------------------------------------------------------------------------------------
 ;-----------------------------------------------------------------------------------------------------------------------
 ;MCM events 
@@ -743,12 +788,15 @@ endFunction
 ;-----------------------------------------------------------------------------------------------------------------------
 
 int function GetVersion()
-    return 3 ; version 1.11
+    return 4 ; version 1.20
 endFunction
 
 event OnVersionUpdate(int a_version)
-    Debug.Notification("Updating V1.11")
-    waitsQueued = 0   
+    Debug.Notification("Updating SQM V1.20")
+    waitsQueued = 0
+    RegisterForKey(assignLeftKey) 
+    RegisterForKey(assignRightKey) 
+    RegisterForKey(assignShoutKey) 
 endEvent 
 
 function EmptyLists()
@@ -761,8 +809,6 @@ function EmptyLists()
         _potionList[ndx] = None
         _shoutsKnown[ndx] = None
         _rightHandList[ndx] = None
-
-
         _leftHandList[ndx] = None
         ndx +=1
     endWhile
@@ -791,32 +837,19 @@ Event OnConfigInit()
 	_rightHandList = new Form[128]
 	_leftHandList = new Form[128]
 
-	_potionQueue = new Form[10]
-	_shoutQueue = new Form[10]
-	_rightHandQueue = new Form[10]
-	_leftHandQueue = new Form[10]
-
-  ;  _potionIndexMap = new Int[128]
-  ;  _shoutIndexMap = new Int[128]
-  ;  _rightHandIndexMap = new Int[128]
-  ;  _leftHandIndexMap = new Int[128]
-  ;  Int i = 0
-  ;  while i < 128
-  ;      _potionIndexMap[i] = i 
-  ;      _shoutIndexMap[i] = i 
-  ;      _rightHandIndexMap[i] = i 
-  ;      _leftHandIndexMap[i] = i
-  ;      i+=1
-  ;  endWhile
-        
+	_potionQueue = new Form[7]
+	_shoutQueue = new Form[7]
+	_rightHandQueue = new Form[7]
+	_leftHandQueue = new Form[7]
+ 
 	;initialize inventory lists for the combo boxes
 	populateLists(PlayerRef)
 
 	;initialize the indices of each of the 7 slots for each equipslot
-	topIndex = new Int[10]
-	bottomIndex = new Int[10]
-	leftIndex = new Int[10]
-	rightIndex = new Int[10]
+	topIndex = new Int[7]
+	bottomIndex = new Int[7]
+	leftIndex = new Int[7]
+	rightIndex = new Int[7]
 
 	;initialize Object ID's for the different combo boxes
 	topArrayOID = new Int[7]
@@ -848,27 +881,24 @@ event OnPageReset(string page)
 	    transOID = AddSliderOption("Opacity", SQM.Alpha, "{0}%")
         mustBeFavoritedOID = AddToggleOption("Only Favorite Items", mustBeFavorited)
         
-
+        ;x, y position and scale widget options
 	    xOID = AddSliderOption("X", SQM.X, "{0}")
 	    yOID = AddSliderOption("Y", SQM.Y, "{0}")
         scaleOID = AddSliderOption("Scale", SQM.mainScale, "{0}%")
 
-        fadeOID = AddToggleOption("Fade Out On/Off", fadeOut)
-        fadeAlphaOID = AddSliderOption("Fade Out Alpha", fadeAlpha, "{0}%")
-        fadeOutDurationOID = AddSliderOption("Fade Out Duration", fadeOutDuration, "{0}")
-        fadeInDurationOID = AddSliderOption("Fade In Duration", fadeInDuration, "{0}")
-        fadeWaitOID = AddSliderOption("Fade Wait Duration", fadeWait, "{0}")
+        ;widget fade variable sliders
+        int flags = 0
+        ;grey out variables if fadeout isn't checked
         if(!fadeOut)
-            SetOptionFlags(fadeAlphaOID, OPTION_FLAG_DISABLED)
-            SetOptionFlags(fadeOutDurationOID, OPTION_FLAG_DISABLED)
-            SetOptionFlags(fadeInDurationOID, OPTION_FLAG_DISABLED)
-            SetOptionFlags(fadeWaitOID, OPTION_FLAG_DISABLED)
-        else
-            SetOptionFlags(fadeAlphaOID, OPTION_FLAG_NONE)
-            SetOptionFlags(fadeOutDurationOID, OPTION_FLAG_NONE)
-            SetOptionFlags(fadeInDurationOID, OPTION_FLAG_NONE)
-            SetOptionFlags(fadeWaitOID, OPTION_FLAG_NONE)
+            flags = OPTION_FLAG_DISABLED
         endIf
+        AddEmptyOption()
+        AddHeaderOption("Fade Out")
+        fadeOID = AddToggleOption("Fade Out On/Off", fadeOut)
+        fadeAlphaOID = AddSliderOption("Fade Out Alpha", fadeAlpha, "{0}%", flags)
+        fadeOutDurationOID = AddSliderOption("Fade Out Duration", fadeOutDuration, "{0}", flags)
+        fadeInDurationOID = AddSliderOption("Fade In Duration", fadeInDuration, "{0}", flags)
+        fadeWaitOID = AddSliderOption("Fade Wait Duration", fadeWait, "{0}", flags)
 		;move cursor to top right position
 	    SetCursorPosition(1)
 
@@ -878,10 +908,22 @@ event OnPageReset(string page)
 	    keyOID_LEFT = AddKeyMapOption("Cycle Left Slot", leftKey, OPTION_FLAG_WITH_UNMAP)
 	    keyOID_RIGHT = AddKeyMapOption("Cycle Right Slot", rightKey, OPTION_FLAG_WITH_UNMAP)
 	    keyOID_ACTIVATE = AddKeyMapOption("Consume Item/Potion", activateKey, OPTION_FLAG_WITH_UNMAP)
+  
+        AddEmptyOption()
+        flags = OPTION_FLAG_WITH_UNMAP
+        if(!ASSIGNMENT_MODE)
+            flags = OPTION_FLAG_DISABLED
+        endIf
+        AddHeaderOption("Assign Equipped Mode")
+        assignEquippedOID = AddToggleOption("Assignment Mode On/Off", ASSIGNMENT_MODE)
+        keyOID_ASSIGNLEFT = AddKeyMapOption("Assign Left Hand Object", assignLeftKey, flags)
+        keyOID_ASSIGNRIGHT = AddKeyMapOption("Assign Right Hand Object", assignRightKey, flags)
+        keyOID_ASSIGNSHOUT = AddKeyMapOption("Assign Shout Object", assignRightKey, flags)
     ;Shout page
     elseIf (page == pages[1])
         AddHeaderOption(pages[1])
 		int ndx = 0
+        ;Add an option for each of the 7 slots
 		while ndx < MAX_QUEUE_SIZE 
 			topArrayOID[ndx] = AddMenuOption("Slot " + (ndx + 1), _shoutQueue[ndx].getName())
 			ndx += 1
@@ -934,19 +976,35 @@ event OnOptionSelect(int option)
     elseIf (option == fadeOID)
         fadeOut = !fadeOut
         SetToggleOptionValue(fadeOID, fadeOut)
+        int flags = 0
         if(!fadeOut)
             SQM.setTransparency(SQM.Alpha)
-            SetOptionFlags(fadeAlphaOID, OPTION_FLAG_DISABLED)
-            SetOptionFlags(fadeOutDurationOID, OPTION_FLAG_DISABLED)
-            SetOptionFlags(fadeInDurationOID, OPTION_FLAG_DISABLED)
-            SetOptionFlags(fadeWaitOID, OPTION_FLAG_DISABLED)
+            flags = OPTION_FLAG_DISABLED
         else
             SQM.FadeOut(fadeAlpha, fadeOutDuration/100.0)
-            SetOptionFlags(fadeAlphaOID, OPTION_FLAG_NONE)
-            SetOptionFlags(fadeOutDurationOID, OPTION_FLAG_NONE)
-            SetOptionFlags(fadeInDurationOID, OPTION_FLAG_NONE)
-            SetOptionFlags(fadeWaitOID, OPTION_FLAG_NONE)
         endIf
+        SetOptionFlags(fadeAlphaOID, flags)
+        SetOptionFlags(fadeOutDurationOID, flags)
+        SetOptionFlags(fadeInDurationOID, flags)
+        SetOptionFlags(fadeWaitOID, flags)
+    elseIf(option == assignEquippedOID)
+        ASSIGNMENT_MODE = !ASSIGNMENT_MODE
+        SetToggleOptionValue(assignEquippedOID, ASSIGNMENT_MODE)
+        int flags 
+        if(ASSIGNMENT_MODE)
+            flags = OPTION_FLAG_WITH_UNMAP
+            RegisterForKey(assignLeftKey)
+            RegisterForKey(assignRightKey)
+            RegisterForKey(assignShoutKey)
+        else
+            flags = OPTION_FLAG_DISABLED
+            UnregisterForKey(assignLeftKey)
+            UnregisterForKey(assignRightKey)
+            UnregisterForKey(assignShoutKey)
+        endIf
+        SetOptionFlags(keyOID_ASSIGNLEFT, flags)
+        SetOptionFlags(keyOID_ASSIGNRIGHT, flags)
+        SetOptionFlags(keyOID_ASSIGNSHOUT, flags)   
     endIf
 endEvent
 
