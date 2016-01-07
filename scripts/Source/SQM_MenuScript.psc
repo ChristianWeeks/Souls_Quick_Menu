@@ -188,7 +188,6 @@ Function populateLists(ObjectReference akContainer)
             itemStr = ""
             if(itemCount > 1 && kForm.GetType() == 41)
                 itemStr = " [" + itemCount + "]"   
-                Debug.MessageBox(kForm + kForm.GetName())
             endIf
 			If kForm.GetType() == 46 ; is a potion
 				_potionListName[nextPotionIndex] = kForm.getName() + "  (" + itemCount + ")"
@@ -1176,38 +1175,64 @@ event OnOptionHighlight(int option)
     endIf
 endEvent
 
+;Method taken from MCM API reference
+bool function checkKeyConflict(string conflictControl, string conflictName)
+    bool continue = true
+    if (conflictControl != "")
+        string msg
+        if (conflictName != "")
+            msg = "This key is already mapped to:\n\"" + conflictControl + "\"\n(" + conflictName + ")\n\nAre you sure you want to continue?"
+        else
+            msg = "This key is already mapped to:\n\"" + conflictControl + "\"\n\nAre you sure you want to continue?"
+        endIf
+
+        continue = ShowMessage(msg, true, "$Yes", "$No")
+    endIf
+    return continue
+endFunction
+
 ;called when a key map box is changed
 event OnOptionKeyMapChange(int option, int keyCode, string conflictControl, string conflictName)
     If (option == keyOID_UP)
-        upKey = keyCode
-        SetKeyMapOptionValue(keyOID_UP, upKey)
-        UnregisterForKey(SQM.getUP())
-        SQM.setUP(keyCode)
-        RegisterForKey(SQM.getUP())
+        if(checkKeyConflict(conflictControl, conflictName))
+            upKey = keyCode
+            SetKeyMapOptionValue(keyOID_UP, upKey)
+            UnregisterForKey(SQM.getUP())
+            SQM.setUP(keyCode)
+            RegisterForKey(SQM.getUP())
+        endIf
     elseIf (option == keyOID_DOWN)
-        downKey = keyCode
-        SetKeyMapOptionValue(keyOID_DOWN, downKey)
-        UnregisterForKey(SQM.getDOWN())
-        SQM.setDOWN(keyCode)
-        RegisterForKey(SQM.getDOWN())
+        if(checkKeyConflict(conflictControl, conflictName))
+            downKey = keyCode
+            SetKeyMapOptionValue(keyOID_DOWN, downKey)
+            UnregisterForKey(SQM.getDOWN())
+            SQM.setDOWN(keyCode)
+            RegisterForKey(SQM.getDOWN())
+        endIf
     elseIf (option == keyOID_LEFT)
-        leftKey = keyCode
-        SetKeyMapOptionValue(keyOID_LEFT, leftKey)
-        UnregisterForKey(SQM.getLEFT())
-        SQM.setLEFT(keyCode)
-        RegisterForKey(SQM.getLEFT())
+        if(checkKeyConflict(conflictControl, conflictName))
+            leftKey = keyCode
+            SetKeyMapOptionValue(keyOID_LEFT, leftKey)
+            UnregisterForKey(SQM.getLEFT())
+            SQM.setLEFT(keyCode)
+            RegisterForKey(SQM.getLEFT())
+        endIf
     elseIf (option == keyOID_RIGHT)
-        rightKey = keyCode
-        SetKeyMapOptionValue(keyOID_RIGHT, rightKey)
-        UnregisterForKey(SQM.getRIGHT())
-        SQM.setRIGHT(keyCode)
-        RegisterForKey(SQM.getRIGHT())
+        if(checkKeyConflict(conflictControl, conflictName))
+            rightKey = keyCode
+            SetKeyMapOptionValue(keyOID_RIGHT, rightKey)
+            UnregisterForKey(SQM.getRIGHT())
+            SQM.setRIGHT(keyCode)
+            RegisterForKey(SQM.getRIGHT())
+        endIf
     elseIf (option == keyOID_ACTIVATE)
-        activateKey = keyCode
-        SetKeyMapOptionValue(keyOID_ACTIVATE, activateKey)
-        UnregisterForKey(SQM.getACTIVATE())
-        SQM.setACTIVATE(keyCode)
-        RegisterForKey(SQM.getACTIVATE())
+        if(checkKeyConflict(conflictControl, conflictName))
+            activateKey = keyCode
+            SetKeyMapOptionValue(keyOID_ACTIVATE, activateKey)
+            UnregisterForKey(SQM.getACTIVATE())
+            SQM.setACTIVATE(keyCode)
+            RegisterForKey(SQM.getACTIVATE())
+        endIf
     endIf
 endEvent
 
