@@ -8,15 +8,16 @@ Import Form
 Bool visible = False
 Int Property mainScale = 100 Auto  
 
-Int c1 = 0
-Int c2 = 0
-Int c3 = 0
-Int c4 = 0
+Int _shoutIndex = 0
+Int _leftIndex = 0
+Int _rightIndex = 0
+Int _potionIndex = 0
 String upStr
 String downStr
 String leftStr
 String rightStr
 Int potionCount
+bool ASSIGNMENT_MODE = false 
 Int[] shoutIconArgs
 Int[] potionIconArgs
 Int[] LHIconArgs
@@ -28,12 +29,6 @@ Int keyCodeLeft = 47		;V
 Int keyCodeRight = 48		;B
 Int keyCodeActivate = 34	;G
 
-function updateQueueIcon(int activeIndex)
-
-	UI.invokeInt(HUD_MENU, WidgetRoot + ".updateDownQueue", activeIndex)
-
-endFunction
-
 function setPotionCount(int count)
 	potionCount = count
 	UI.invokeInt(HUD_MENU, WidgetRoot + ".setPotionCounter", potionCount)
@@ -44,6 +39,10 @@ function fadeOut(float a_alpha, float a_duration)
     args[0] = a_alpha
     args[1] = a_duration
     UI.InvokeFloatA(HUD_MENU, WidgetRoot + ".fadeOut", args)
+endFunction
+
+function setAssignMode(bool a)
+    ASSIGNMENT_MODE = a
 endFunction
 
 function setUpStr(String newStr)
@@ -76,18 +75,18 @@ Bool Property isVisible
 	EndFunction
 EndProperty
 
-Int Property count1
-{Set this property true to make the numbers visible}
+Int Property shoutIndex
 	Int Function Get()
-		Return c1
+		Return _shoutIndex
 	EndFunction
 
 	Function Set(Int abVal)
 		If (Ready)
-			c1 = abVal
-            Int[] args = new Int[2]
-            args[0] = c1
+			_shoutIndex = abVal
+            Int[] args = new Int[3]
+            args[0] = _shoutIndex
             args[1] = 1
+            args[2] = ASSIGNMENT_MODE as int
 			UI.InvokeInt(HUD_MENU, WidgetRoot + ".colorIcon", 1)
 			UI.InvokeIntA(HUD_MENU, WidgetRoot + ".updateQueue", args)
 			UI.InvokeIntA(HUD_MENU, WidgetRoot + ".setLHIcon", LHIconArgs)
@@ -99,18 +98,18 @@ Int Property count1
 EndProperty
 
 
-Int Property count2
-{Set this property true to make the numbers visible}
+Int Property leftIndex
 	Int Function Get()
-		Return c2
+		Return _leftIndex
 	EndFunction
 	
 	Function Set(Int abVal)
 		If (Ready)
-			c2 = abVal
-            Int[] args = new Int[2]
-            args[0] = c2
+			_leftIndex = abVal
+            Int[] args = new Int[3]
+            args[0] = _leftIndex
             args[1] = 2
+            args[2] = ASSIGNMENT_MODE as int
 			UI.InvokeInt(HUD_MENU, WidgetRoot + ".colorIcon", 2)
 			UI.InvokeIntA(HUD_MENU, WidgetRoot + ".updateQueue", args)
             UI.InvokeIntA(HUD_MENU, WidgetRoot + ".setShoutIcon", shoutIconArgs)
@@ -121,18 +120,18 @@ Int Property count2
 	EndFunction
 EndProperty
 
-Int Property count3
-{Set this property true to make the numbers visible}
+Int Property rightIndex
 	Int Function Get()
-		Return c3
+		Return _rightIndex
 	EndFunction
 	
 	Function Set(Int abVal)
 		If (Ready)
-			c3 = abVal
-            Int[] args = new Int[2]
-            args[0] = c3
+			_rightIndex = abVal
+            Int[] args = new Int[3]
+            args[0] = _rightIndex
             args[1] = 3 
+            args[2] = ASSIGNMENT_MODE as int
 			UI.InvokeInt(HUD_MENU, WidgetRoot + ".colorIcon", 3)
 			UI.InvokeIntA(HUD_MENU, WidgetRoot + ".updateQueue", args)
 			UI.InvokeIntA(HUD_MENU, WidgetRoot + ".setRHIcon", RHIconArgs)
@@ -143,18 +142,18 @@ Int Property count3
 	EndFunction
 EndProperty
 
-Int Property count4
-{Set this property true to make the numbers visible}
+Int Property potionIndex
 	Int Function Get()
-		Return c4
+		Return _potionIndex
 	EndFunction
 	
 	Function Set(Int abVal)
 		If (Ready)
-			c4 = abVal
-            Int[] args = new Int[2]
-            args[0] = c4
+			_potionIndex = abVal
+            Int[] args = new Int[3]
+            args[0] = _potionIndex
             args[1] = 4
+            args[2] = ASSIGNMENT_MODE as int
 			UI.InvokeInt(HUD_MENU, WidgetRoot + ".colorIcon", 4)
 			UI.InvokeIntA(HUD_MENU, WidgetRoot + ".updateQueue", args)
 			UI.InvokeString(HUD_MENU, WidgetRoot + ".setDownName", downStr)
@@ -233,38 +232,38 @@ EndFunction
 
 
 Int Function getUpIndex()
-	Return c2
+	Return _leftIndex
 EndFunction
 
 Int Function getDownIndex()
-	Return c4
+	Return _potionIndex
 EndFunction
 
 Int Function getLeftIndex()
-	Return c1
+	Return _shoutIndex
 EndFunction
 
 Int Function getRightIndex()
-	Return c3
+	Return _rightIndex
 EndFunction
 
-Function activateButton(String s, int newIndex, int[] args)
-    ;args[0] - formType
-    ;args[1] - equipslot
-    ;args[2] - slotMask
-    ;args[3] - formID
+Function activateButton(String s, int newIndex, int[] iconArgs)
+    ;iconArgs[0] - formType
+    ;iconArgs[1] - equipslot
+    ;iconArgs[2] - slotMask
+    ;iconArgs[3] - formID
 	If (s == "up")
-        shoutIconArgs = args
-		count2 = newIndex 
+        shoutIconArgs = iconArgs
+		leftIndex = newIndex 
 	elseIf (s == "down")
-        potionIconArgs = args
-		count4 = newIndex 
+        potionIconArgs = iconArgs
+		potionIndex = newIndex 
 	elseIf (s == "left")
-        LHIconArgs = args
-		count1 = newIndex 
+        LHIconArgs = iconArgs
+		shoutIndex = newIndex 
 	elseIf (s == "right")
-        RHIconArgs = args
-		count3 = newIndex 
+        RHIconArgs = iconArgs
+		rightIndex = newIndex 
 	elseIf (s == "activate")
 	endIf
 EndFunction
@@ -300,7 +299,6 @@ String Function GetWidgetType()
 	Return "SQM_WidgetScript"
 EndFunction
 
-
 ;events
 Event OnWidgetReset()
     RequireExtend = false
@@ -313,10 +311,10 @@ Event OnWidgetReset()
 	setLEFT(keyCodeLeft)
 	setRIGHT(keyCodeRight)
 	setACTIVATE(keyCodeActivate)
-	count1 = c1
-	count2 = c2
-	count3 = c3
-	count4 = c4
+	shoutIndex = _shoutIndex
+	leftIndex = _leftIndex
+	rightIndex = _rightIndex
+	potionIndex = _potionIndex
 	UI.InvokeBool(HUD_MENU, WidgetRoot + ".setVisible", visible)
 EndEvent
 

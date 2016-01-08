@@ -108,9 +108,9 @@ int leftKey = 47		; V
 int rightKey = 48		; B
 int activateKey = 34	; G
 
-int assignLeftKey = 59  ;Num7
-int assignRightKey = 60 ;Num8
-int assignShoutKey = 61 ;Num9
+int assignLeftKey = -1  ;f1
+int assignRightKey = -1 ;f2
+int assignShoutKey = -1 ;f3
 
 int MAX_QUEUE_SIZE = 7
 
@@ -134,9 +134,9 @@ Function CheckForDLC()
 		shoutForms[ndx] = Game.GetFormFromFile(0x00007CB6, "Dawnguard.esm") As Shout
 		;Summon Durnehviir
 		shoutForms[ndx+1] = Game.GetFormFromFile(0x000030D2, "Dawnguard.esm") As Shout
-		;Drain Vitality
-		shoutForms[ndx+2] = Game.GetFormFromFile(0x00008A62, "Dawnguard.esm") As Shout
-		ndx += 3 
+    ;Drain Vitality
+    shoutForms[ndx+2] = Game.GetFormFromFile(0x00008A62, "Dawnguard.esm") As Shout
+    ndx += 3 
 	endif
 
 	;check for Dragonborn
@@ -484,10 +484,14 @@ Event OnKeyUp(Int KeyCode, Float HoldTime)
     int[] args
 	If KeyCode == SQM.getUP() && !Utility.IsInMenuMode()
         fadeInWidget()
-		cyclePower()
+        if(ASSIGNMENT_MODE)
+            advanceQueue_ASSIGNMENT_MODE(2)
+        else
+            cyclePower()
+        endIf
         args = GetItemIconArgs(2)
-		SQM.setUpStr(getCurrQItemName(2))
-		SQM.activateButton("up", _currQIndices[2], args)
+        SQM.setUpStr(getCurrQItemName(2))
+        SQM.activateButton("up", _currQIndices[2], args)
         fadeOutWidget()
 	elseIf KeyCode == SQM.getDOWN() && !Utility.IsInMenuMode()
         fadeInWidget()
@@ -498,23 +502,32 @@ Event OnKeyUp(Int KeyCode, Float HoldTime)
         fadeOutWidget()
 	elseIf KeyCode == SQM.getLEFT() && !Utility.IsInMenuMode()
         fadeInWidget()
-		cycleHand(0)
+        if(ASSIGNMENT_MODE)
+            advanceQueue_ASSIGNMENT_MODE(0)
+        else
+            cycleHand(0)
+        endIf
         args = GetItemIconArgs(0)
-		SQM.setLeftStr(getCurrQItemName(0))
-		SQM.activateButton("left", _currQIndices[0], args)
+        SQM.setLeftStr(getCurrQItemName(0))
+        SQM.activateButton("left", _currQIndices[0], args)
         fadeOutWidget()
 	elseIf KeyCode == SQM.getRIGHT() && !Utility.IsInMenuMode()
         fadeInWidget()
-		cycleHand(1)
+        if(ASSIGNMENT_MODE)
+            advanceQueue_ASSIGNMENT_MODE(1)
+        else
+            cycleHand(1)
+        endIf
         args = GetItemIconArgs(1)
-		SQM.setRightStr(getCurrQItemName(1))
-		SQM.activateButton("right", _currQIndices[1], args)
+        SQM.setRightStr(getCurrQItemName(1))
+        SQM.activateButton("right", _currQIndices[1], args)
         fadeOutWidget()
 	elseIf KeyCode == SQM.getACTIVATE() && !Utility.IsInMenuMode()
         fadeInWidget()
 		useEquippedItem()
         fadeOutWidget()
     elseIf KeyCode == assignLeftKey && !Utility.IsInMenuMode()
+        Debug.MessageBox("INSIDE")
         fadeInWidget()
         AssignCurrEquippedItem(0)
         args = GetItemIconArgs(0)
@@ -666,7 +679,7 @@ bool function cycleHand(int slotID)
 endFunction
 
 ;moves the queue to the next slot
-int function advanceQueue(int queueID, int depth)
+int function advanceQueue_ASSIGNMENT_MODE(int queueID)
 	int currIndex = _currQIndices[queueID]
 	int newIndex
 	if (currIndex == MAX_QUEUE_SIZE - 1)
@@ -675,11 +688,16 @@ int function advanceQueue(int queueID, int depth)
 		newIndex = currIndex + 1	
 	endIf
 	_currQIndices[queueID] = newIndex
+    return newIndex
+endFunction
+
+int function advanceQueue(int queueID, int depth)
+
+	int newIndex = advanceQueue_ASSIGNMENT_MODE(queueID)
 	;Recursively advance until there is an item in the queue or the entire length of the queue has been traversed
 	if(!ValidateSlot(queueID) && depth < MAX_QUEUE_SIZE)
 		newIndex = advanceQueue(queueID, depth + 1)
 	endIf
-	SQM.updateQueueIcon(newIndex)
 	return newIndex
 endFunction
 
@@ -990,13 +1008,22 @@ event OnOptionSelect(int option)
         ASSIGNMENT_MODE = !ASSIGNMENT_MODE
         SetToggleOptionValue(assignEquippedOID, ASSIGNMENT_MODE)
         int flags 
+        SQM.setAssignMode(ASSIGNMENT_MODE) 
         if(ASSIGNMENT_MODE)
             flags = OPTION_FLAG_WITH_UNMAP
+            ;Change gem colors
+            ;SQM.count1 = _currQIndices[0]
+            ;SQM.count2 = _currQIndices[1]
+            ;SQM.count3 = _currQIndices[2]
+            ;Register keys
             RegisterForKey(assignLeftKey)
             RegisterForKey(assignRightKey)
             RegisterForKey(assignShoutKey)
         else
             flags = OPTION_FLAG_DISABLED
+            ;SQM.count1 = _currQIndices[0]
+            ;SQM.count2 = _currQIndices[1]
+            ;SQM.count3 = _currQIndices[2]
             UnregisterForKey(assignLeftKey)
             UnregisterForKey(assignRightKey)
             UnregisterForKey(assignShoutKey)
@@ -1172,6 +1199,14 @@ event OnOptionHighlight(int option)
         SetInfoText("The amount of time (in centiseconds) it will take the widget to fade into view after a key is pressed.")
     elseIf(option == fadeWaitOID)
         SetInfoText("The amount of time (in centiseconds) the widget will wait after the last key is pressed to begin fading.")
+    elseIf(option == assignEquippedOID)
+        SetInfoText("In assignment mode, you can assign currently equipped items and spells to your queues.  Cycling through the queue will not skip empty slots and weapons / spells will not actually equip.  Disable when done.  Assignment keys will only work when this is on.")
+    elseIf(option == keyOID_ASSIGNLEFT)
+        SetInfoText("Pressing this key will assign the weapon, spell, or item in your left hand to the current slot in the left hand queue.")
+    elseIf(option == keyOID_ASSIGNRIGHT)
+        SetInfoText("Pressing this key will assign the weapon, spell, or item in your right hand to the current slot in the left hand queue.")
+    elseIf(option == keyOID_ASSIGNSHOUT)
+        SetInfoText("Pressing this key will assign the shout or ability in your power slot to the current slot in the left hand queue.")
     endIf
 endEvent
 
@@ -1233,6 +1268,27 @@ event OnOptionKeyMapChange(int option, int keyCode, string conflictControl, stri
             SQM.setACTIVATE(keyCode)
             RegisterForKey(SQM.getACTIVATE())
         endIf
+    elseIf(option == keyOID_ASSIGNLEFT)
+        if(checkKeyConflict(conflictControl, conflictName))
+            UnregisterForKey(assignLeftKey)
+            assignLeftKey = keyCode
+            SetKeyMapOptionValue(keyOID_ASSIGNLEFT, assignLeftKey)
+            RegisterForKey(assignLeftKey)
+        endIf
+    elseIf(option == keyOID_ASSIGNRIGHT)
+        if(checkKeyConflict(conflictControl, conflictName))
+            UnregisterForKey(assignRightKey)
+            assignRightKey = keyCode
+            SetKeyMapOptionValue(keyOID_ASSIGNRIGHT, assignRightKey)
+            RegisterForKey(assignRightKey)
+        endIf
+    elseIf(option == keyOID_ASSIGNSHOUT)
+        if(checkKeyConflict(conflictControl, conflictName))
+            UnregisterForKey(assignShoutKey)
+            assignShoutKey = keyCode
+            SetKeyMapOptionValue(keyOID_ASSIGNSHOUT, assignShoutKey)
+            RegisterForKey(assignShoutKey)
+        endIf 
     endIf
 endEvent
 
@@ -1322,7 +1378,6 @@ event OnOptionMenuAccept(int option, int index)
 		endIf
 		iElement += 1
 	endWhile
-
 endEvent
 ;-----------------------------------------------------------------------------------------------------------------------
 ;-----------------------------------------------------------------------------------------------------------------------
