@@ -23,11 +23,11 @@ Int[] potionIconArgs
 Int[] LHIconArgs
 Int[] RHIconArgs
 
-Int keyCodeUp = 45 		    ;X
-Int keyCodeDown = 21 		;Y
-Int keyCodeLeft = 47		;V
-Int keyCodeRight = 48		;B
-Int keyCodeActivate = 34	;G
+Int cycleShoutKey = 45 		    ;X
+Int cyclePotionKey = 21 		;Y
+Int cycleLeftKey = 47		;V
+Int cycleRightKey = 48		;B
+Int usePotionKey = 34	;G
 
 function setPotionCount(int count)
 	potionCount = count
@@ -96,7 +96,6 @@ Int Property shoutIndex
 		EndIf
 	EndFunction
 EndProperty
-
 
 Int Property leftIndex
 	Int Function Get()
@@ -180,71 +179,56 @@ Function setY(Float afY)
 	EndIf
 EndFunction
 
-Function setUP(Int afY)
+Function setShoutKey(Int afY)
 	If (Ready)
-		keyCodeUp = afY
+        UnregisterForKey(cycleShoutKey)
+		cycleShoutKey = afY
+        RegisterForKey(cycleShoutKey)
 	EndIf
 EndFunction
 
-Function setDOWN(Int afY)
+Function setPotionKey(Int afY)
 	If (Ready)
-		keyCodeDown = afY
+		cyclePotionKey = afY
 	EndIf
 EndFunction
 
-Function setLEFT(Int afY)
+Function setLeftKey(Int afY)
 	If (Ready)
-		keyCodeLeft = afY
+		cycleLeftKey = afY
 	EndIf
 EndFunction
 
-Function setRIGHT(Int afY)
+Function setRightKey(Int afY)
 	If (Ready)
-		keyCodeRight = afY
+		cycleRightKey = afY
 	EndIf
 EndFunction
 
-Function setACTIVATE(Int afY)
+Function setUsePotionKey(Int afY)
 	If (Ready)
-		keyCodeActivate = afY
+		usePotionKey = afY
 	EndIf
 EndFunction
 
 Int Function getUP()
-	Return keyCodeUp
+	Return cycleShoutKey
 EndFunction
 
 Int Function getDOWN()
-	Return keyCodeDown
+	Return cyclePotionKey
 EndFunction
 
 Int Function getLEFT()
-	Return keyCodeLeft
+	Return cycleLeftKey
 EndFunction
 
 Int Function getRIGHT()
-	Return keyCodeRight
+	Return cycleRightKey
 EndFunction
 
 Int Function getACTIVATE()
-	Return keyCodeActivate
-EndFunction
-
-
-Int Function getUpIndex()
-	Return _leftIndex
-EndFunction
-
-Int Function getDownIndex()
-	Return _potionIndex
-EndFunction
-
-Int Function getLeftIndex()
-	Return _shoutIndex
-EndFunction
-
-Int Function getRightIndex()
-	Return _rightIndex
+	Return usePotionKey
 EndFunction
 
 Function activateButton(String s, int newIndex, int[] iconArgs)
@@ -283,11 +267,11 @@ EndFunction
 
 Function updateStatus()
 	If (Ready)
-		;RegisterForKey(keyCodeUp)
-		;RegisterForKey(keyCodeDown)
-		;RegisterForKey(keyCodeLeft)
-		;RegisterForKey(keyCodeRight)
-		;RegisterForKey(keyCodeActivate)
+		;RegisterForKey(cycleShoutKey)
+		;RegisterForKey(cyclePotionKey)
+		;RegisterForKey(cycleLeftKey)
+		;RegisterForKey(cycleRightKey)
+		;RegisterForKey(usePotionKey)
 	endIf
 EndFunction
 
@@ -306,11 +290,11 @@ Event OnWidgetReset()
 	setX(X)
 	setY(Y)
     setScale(mainScale)
-	setUP(keyCodeUp)
-	setDOWN(keyCodeDown)
-	setLEFT(keyCodeLeft)
-	setRIGHT(keyCodeRight)
-	setACTIVATE(keyCodeActivate)
+	setShoutKey(cycleShoutKey)
+	setPotionKey(cyclePotionKey)
+	setLeftKey(cycleLeftKey)
+	setRightKey(cycleRightKey)
+	setUsePotionKey(usePotionKey)
 	shoutIndex = _shoutIndex
 	leftIndex = _leftIndex
 	rightIndex = _rightIndex

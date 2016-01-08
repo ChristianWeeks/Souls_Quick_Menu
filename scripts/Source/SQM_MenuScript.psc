@@ -48,16 +48,16 @@ bool mustBeFavorited = false
 int assignEquippedOID
 
 ;array of object id's for each item queue (MCM menu)
-int[] topArrayOID
-int[] bottomArrayOID
-int[] leftArrayOID
-int[] rightArrayOID
+int[] shoutAssignOID
+int[] potionAssignOID
+int[] leftAssignOID
+int[] rightAssignOID
 
 ;mcm keymap option id's
-int keyOID_UP
-int keyOID_DOWN
-int keyOID_LEFT
-int keyOID_RIGHT
+int keyOID_CSHOUT
+int keyOID_CPOTION
+int keyOID_CLEFTHAND
+int keyOID_CRIGHTHAND
 int keyOID_ACTIVATE
 int keyOID_ASSIGNLEFT
 int keyOID_ASSIGNRIGHT
@@ -92,21 +92,21 @@ int[]       _rightHandIndexMap
 int[]       _leftHandIndexMap
 
 ;array of indices for each item dropdown menu
-int[] 		topIndex
-int[] 		bottomIndex
-int[] 		leftIndex
-int[] 		rightIndex
+int[] 		shoutListIndex
+int[] 		potionListIndex
+int[] 		leftListIndex
+int[] 		rightListIndex
 
 ;initialize values for visibility and transparency
 bool visVal = true
 float transVal = 50.0
 
 ;keys
-int upKey = 45			; X
-int downKey = 21		; Y
-int leftKey = 47		; V
-int rightKey = 48		; B
-int activateKey = 34	; G
+int cycleShoutKey = 45			; X
+int cyclePotionKey = 21		; Y
+int cycleLeftKey = 47		; V
+int cycleRightKey = 48		; B
+int usePotionKey = 34	; G
 
 int assignLeftKey = -1  ;f1
 int assignRightKey = -1 ;f2
@@ -134,9 +134,9 @@ Function CheckForDLC()
 		shoutForms[ndx] = Game.GetFormFromFile(0x00007CB6, "Dawnguard.esm") As Shout
 		;Summon Durnehviir
 		shoutForms[ndx+1] = Game.GetFormFromFile(0x000030D2, "Dawnguard.esm") As Shout
-    ;Drain Vitality
-    shoutForms[ndx+2] = Game.GetFormFromFile(0x00008A62, "Dawnguard.esm") As Shout
-    ndx += 3 
+        ;Drain Vitality
+        shoutForms[ndx+2] = Game.GetFormFromFile(0x00008A62, "Dawnguard.esm") As Shout
+        ndx += 3 
 	endif
 
 	;check for Dragonborn
@@ -843,7 +843,6 @@ Event OnConfigInit()
 	_currQIndices = new int[4]
 
     _voiceSpells = new Spell[128]
-	;128 is the limit on the combo boxes in MCM
 	_potionListName = new string[128]
 	_shoutListName = new string[128]
 	_rightHandListName = new string[128]
@@ -863,16 +862,16 @@ Event OnConfigInit()
 	populateLists(PlayerRef)
 
 	;initialize the indices of each of the 7 slots for each equipslot
-	topIndex = new Int[7]
-	bottomIndex = new Int[7]
-	leftIndex = new Int[7]
-	rightIndex = new Int[7]
+	shoutListIndex = new Int[7]
+	potionListIndex = new Int[7]
+	leftListIndex = new Int[7]
+	rightListIndex = new Int[7]
 
-	;initialize Object ID's for the different combo boxes
-	topArrayOID = new Int[7]
-	bottomArrayOID = new Int[7]
-	leftArrayOID = new Int[7]
-	rightArrayOID = new Int[7]
+	;initialize Object ID's for the drop down menus of the 7 slots for each queue 
+	shoutAssignOID = new Int[7]
+	potionAssignOID = new Int[7]
+	leftAssignOID = new Int[7]
+	rightAssignOID = new Int[7]
 
 	RegisterForKey(SQM.getUP())
 	RegisterForKey(SQM.getDOWN())
@@ -920,11 +919,11 @@ event OnPageReset(string page)
 	    SetCursorPosition(1)
 
 	    AddHeaderOption("Key Bindings")
-	    keyOID_UP = AddKeyMapOption("Cycle Upper Slot", upKey, OPTION_FLAG_WITH_UNMAP)
-	    keyOID_DOWN = AddKeyMapOption("Cycle Lower Slot", downKey, OPTION_FLAG_WITH_UNMAP)
-	    keyOID_LEFT = AddKeyMapOption("Cycle Left Slot", leftKey, OPTION_FLAG_WITH_UNMAP)
-	    keyOID_RIGHT = AddKeyMapOption("Cycle Right Slot", rightKey, OPTION_FLAG_WITH_UNMAP)
-	    keyOID_ACTIVATE = AddKeyMapOption("Consume Item/Potion", activateKey, OPTION_FLAG_WITH_UNMAP)
+	    keyOID_CSHOUT = AddKeyMapOption("Cycle Shout Slot", cycleShoutKey, OPTION_FLAG_WITH_UNMAP)
+	    keyOID_CPOTION = AddKeyMapOption("Cycle Potion Slot", cyclePotionKey, OPTION_FLAG_WITH_UNMAP)
+	    keyOID_CLEFTHAND = AddKeyMapOption("Cycle Left Hand Slot", cycleLeftKey, OPTION_FLAG_WITH_UNMAP)
+	    keyOID_CRIGHTHAND = AddKeyMapOption("Cycle Right Hand Slot", cycleRightKey, OPTION_FLAG_WITH_UNMAP)
+	    keyOID_ACTIVATE = AddKeyMapOption("Consume Item/Potion", usePotionKey, OPTION_FLAG_WITH_UNMAP)
   
         AddEmptyOption()
         flags = OPTION_FLAG_WITH_UNMAP
@@ -942,7 +941,7 @@ event OnPageReset(string page)
 		int ndx = 0
         ;Add an option for each of the 7 slots
 		while ndx < MAX_QUEUE_SIZE 
-			topArrayOID[ndx] = AddMenuOption("Slot " + (ndx + 1), _shoutQueue[ndx].getName())
+			shoutAssignOID[ndx] = AddMenuOption("Slot " + (ndx + 1), _shoutQueue[ndx].getName())
 			ndx += 1
 		endWhile
 		refreshOID = AddTextOption("Refresh Inventory Items", "") 
@@ -951,7 +950,7 @@ event OnPageReset(string page)
         AddHeaderOption(pages[2])
 		int ndx = 0
 		while ndx < MAX_QUEUE_SIZE
-			bottomArrayOID[ndx] = AddMenuOption("Slot " + (ndx + 1), _potionQueue[ndx].getName())
+			potionAssignOID[ndx] = AddMenuOption("Slot " + (ndx + 1), _potionQueue[ndx].getName())
 			ndx += 1
 		endWhile
 		refreshOID = AddTextOption("Refresh Inventory Items", "")
@@ -960,7 +959,7 @@ event OnPageReset(string page)
         AddHeaderOption(pages[3])
 		int ndx = 0
 		while ndx < MAX_QUEUE_SIZE
-			leftArrayOID[ndx] = AddMenuOption("Slot " + (ndx + 1), _leftHandQueue[ndx].getName())
+			leftAssignOID[ndx] = AddMenuOption("Slot " + (ndx + 1), _leftHandQueue[ndx].getName())
 			ndx += 1
 		endWhile
 		refreshOID = AddTextOption("Refresh Inventory Items", "")
@@ -969,7 +968,7 @@ event OnPageReset(string page)
         AddHeaderOption(pages[4])
 		int ndx = 0
 		while ndx < MAX_QUEUE_SIZE
-			rightArrayOID[ndx] = AddMenuOption("Slot " + (ndx + 1), _rightHandQueue[ndx].getName())
+			rightAssignOID[ndx] = AddMenuOption("Slot " + (ndx + 1), _rightHandQueue[ndx].getName())
 			ndx += 1
 		endWhile
 		refreshOID = AddTextOption("Refresh Inventory Items", "")
@@ -1043,21 +1042,21 @@ event OnOptionDefault(int option)
     elseIf (option == transOID)
         transVal = 100.0 ; default value
         SetSliderOptionValue(transOID, transVal, "{0}%")
-    elseIf (option == keyOID_UP)
-        upKey = 45 ; default value
-        SetKeyMapOptionValue(keyOID_UP, upKey)
-    elseIf (option == keyOID_DOWN)
-        downKey = 21 ; default value
-        SetKeyMapOptionValue(keyOID_DOWN, downKey)
-    elseIf (option == keyOID_LEFT)
-        leftKey = 47 ; default value
-        SetKeyMapOptionValue(keyOID_LEFT, leftKey)
-    elseIf (option == keyOID_RIGHT)
-        rightKey = 48 ; default value
-        SetKeyMapOptionValue(keyOID_RIGHT, rightKey)
+    elseIf (option == keyOID_CSHOUT)
+        cycleShoutKey = 45 ; default value
+        SetKeyMapOptionValue(keyOID_CSHOUT, cycleShoutKey)
+    elseIf (option == keyOID_CPOTION)
+        cyclePotionKey = 21 ; default value
+        SetKeyMapOptionValue(keyOID_CPOTION, cyclePotionKey)
+    elseIf (option == keyOID_CLEFTHAND)
+        cycleLeftKey = 47 ; default value
+        SetKeyMapOptionValue(keyOID_CLEFTHAND, cycleLeftKey)
+    elseIf (option == keyOID_CRIGHTHAND)
+        cycleRightKey = 48 ; default value
+        SetKeyMapOptionValue(keyOID_CRIGHTHAND, cycleRightKey)
     elseIf (option == keyOID_ACTIVATE)
-        activateKey = 34 ; default value
-        SetKeyMapOptionValue(keyOID_ACTIVATE, activateKey)
+        usePotionKey = 34 ; default value
+        SetKeyMapOptionValue(keyOID_ACTIVATE, usePotionKey)
     elseIf (option == xOID)
         SQM.setX(10.0)
         SetSliderOptionValue(option, SQM.X, "{0}")
@@ -1163,19 +1162,19 @@ event OnOptionHighlight(int option)
     elseIf (option == transOID)
         SetInfoText("Click this option to adjust the HUD transparency\nDefault: 100.0")
     ;keyUp
-    elseIf (option == keyOID_UP)
+    elseIf (option == keyOID_CSHOUT)
         SetInfoText("Select to bind key to cycle the shout slot\nDefault: X")
 
     ;keyDown
-    elseIf (option == keyOID_DOWN)
+    elseIf (option == keyOID_CPOTION)
         SetInfoText("Select to bind key to cycle the potion slot\nDefault: Y\nSuggested: F, but you should first unassign F from 'Toggle POV' in the Controls Menu")
 
     ;keyLeft
-    elseIf (option == keyOID_LEFT)
+    elseIf (option == keyOID_CLEFTHAND)
         SetInfoText("Select to bind key to left hand slot\nDefault: V\nSuggested: C, but you should first unassign C from 'Auto-move' in the Controls Menu")
 
     ;keyRight
-    elseIf (option == keyOID_RIGHT)
+    elseIf (option == keyOID_CRIGHTHAND)
         SetInfoText("Select to bind key to right hand slot\nDefault: B\nSuggested: V")
 
     ;keyActivate
@@ -1220,7 +1219,6 @@ bool function checkKeyConflict(string conflictControl, string conflictName)
         else
             msg = "This key is already mapped to:\n\"" + conflictControl + "\"\n\nAre you sure you want to continue?"
         endIf
-
         continue = ShowMessage(msg, true, "$Yes", "$No")
     endIf
     return continue
@@ -1228,42 +1226,42 @@ endFunction
 
 ;called when a key map box is changed
 event OnOptionKeyMapChange(int option, int keyCode, string conflictControl, string conflictName)
-    If (option == keyOID_UP)
+    If (option == keyOID_CSHOUT)
         if(checkKeyConflict(conflictControl, conflictName))
-            upKey = keyCode
-            SetKeyMapOptionValue(keyOID_UP, upKey)
+            cycleShoutKey = keyCode
+            SetKeyMapOptionValue(keyOID_CSHOUT, cycleShoutKey)
             UnregisterForKey(SQM.getUP())
-            SQM.setUP(keyCode)
+            SQM.setShoutKey(keyCode)
             RegisterForKey(SQM.getUP())
         endIf
-    elseIf (option == keyOID_DOWN)
+    elseIf (option == keyOID_CPOTION)
         if(checkKeyConflict(conflictControl, conflictName))
-            downKey = keyCode
-            SetKeyMapOptionValue(keyOID_DOWN, downKey)
+            cyclePotionKey = keyCode
+            SetKeyMapOptionValue(keyOID_CPOTION, cyclePotionKey)
             UnregisterForKey(SQM.getDOWN())
-            SQM.setDOWN(keyCode)
+            SQM.setPotionKey(keyCode)
             RegisterForKey(SQM.getDOWN())
         endIf
-    elseIf (option == keyOID_LEFT)
+    elseIf (option == keyOID_CLEFTHAND)
         if(checkKeyConflict(conflictControl, conflictName))
-            leftKey = keyCode
-            SetKeyMapOptionValue(keyOID_LEFT, leftKey)
+            cycleLeftKey = keyCode
+            SetKeyMapOptionValue(keyOID_CLEFTHAND, cycleLeftKey)
             UnregisterForKey(SQM.getLEFT())
-            SQM.setLEFT(keyCode)
+            SQM.setLeftKey(keyCode)
             RegisterForKey(SQM.getLEFT())
         endIf
-    elseIf (option == keyOID_RIGHT)
+    elseIf (option == keyOID_CRIGHTHAND)
         if(checkKeyConflict(conflictControl, conflictName))
-            rightKey = keyCode
-            SetKeyMapOptionValue(keyOID_RIGHT, rightKey)
+            cycleRightKey = keyCode
+            SetKeyMapOptionValue(keyOID_CRIGHTHAND, cycleRightKey)
             UnregisterForKey(SQM.getRIGHT())
-            SQM.setRIGHT(keyCode)
+            SQM.setRightKey(keyCode)
             RegisterForKey(SQM.getRIGHT())
         endIf
     elseIf (option == keyOID_ACTIVATE)
         if(checkKeyConflict(conflictControl, conflictName))
-            activateKey = keyCode
-            SetKeyMapOptionValue(keyOID_ACTIVATE, activateKey)
+            usePotionKey = keyCode
+            SetKeyMapOptionValue(keyOID_ACTIVATE, usePotionKey)
             UnregisterForKey(SQM.getACTIVATE())
             SQM.setACTIVATE(keyCode)
             RegisterForKey(SQM.getACTIVATE())
@@ -1295,40 +1293,40 @@ endEvent
 ;called when the drop down menu is opened for selecting queue items
 event OnOptionMenuOpen(int option)
 	Int iElement = 0
-	While iElement < topArrayOID.Length
-		If (option == topArrayOID[iElement])
+	While iElement < shoutAssignOID.Length
+		If (option == shoutAssignOID[iElement])
 	      		SetMenuDialogOptions(_shoutListName)
-          		SetMenuDialogStartIndex(topIndex[iElement])
+          		SetMenuDialogStartIndex(shoutListIndex[iElement])
         		SetMenuDialogDefaultIndex(0)
 		endIf
 		iElement += 1
 	endWhile
 
 	iElement = 0
-	While iElement < bottomArrayOID.Length
-		If (option == bottomArrayOID[iElement])
+	While iElement < potionAssignOID.Length
+		If (option == potionAssignOID[iElement])
 	      		SetMenuDialogOptions(_potionListName)
-          		SetMenuDialogStartIndex(bottomIndex[iElement])
+          		SetMenuDialogStartIndex(potionListIndex[iElement])
         		SetMenuDialogDefaultIndex(0)
 		endIf
 		iElement += 1
 	endWhile
 
 	iElement = 0
-	While iElement < leftArrayOID.Length
-		If (option == leftArrayOID[iElement])
+	While iElement < leftAssignOID.Length
+		If (option == leftAssignOID[iElement])
 	      		SetMenuDialogOptions(_leftHandListName)
-          		SetMenuDialogStartIndex(leftIndex[iElement])
+          		SetMenuDialogStartIndex(leftListIndex[iElement])
         		SetMenuDialogDefaultIndex(0)
 		endIf
 		iElement += 1
 	endWhile
 
 	iElement = 0
-	While iElement < rightArrayOID.Length
-		If (option == rightArrayOID[iElement])
+	While iElement < rightAssignOID.Length
+		If (option == rightAssignOID[iElement])
 	      		SetMenuDialogOptions(_rightHandListName)
-          		SetMenuDialogStartIndex(rightIndex[iElement])
+          		SetMenuDialogStartIndex(rightListIndex[iElement])
         		SetMenuDialogDefaultIndex(0)
 		endIf
 		iElement += 1
@@ -1340,41 +1338,41 @@ endEvent
 event OnOptionMenuAccept(int option, int index)
 
 	Int iElement = 0
-	While iElement < topArrayOID.Length
-		If (option == topArrayOID[iElement])
+	While iElement < shoutAssignOID.Length
+		If (option == shoutAssignOID[iElement])
 			_shoutQueue[iElement] = _shoutsKnown[index]
-            topIndex[iElement] = index
-            SetMenuOptionValue(topArrayOID[iElement], _shoutQueue[iElement].getName())
+            shoutListIndex[iElement] = index
+            SetMenuOptionValue(shoutAssignOID[iElement], _shoutQueue[iElement].getName())
 		endIf
 		iElement += 1
 	endWhile
 
 	iElement = 0
-	While iElement < bottomArrayOID.Length
-		If (option == bottomArrayOID[iElement])
+	While iElement < potionAssignOID.Length
+		If (option == potionAssignOID[iElement])
 			_potionQueue[iElement] = _potionList[index]
-            bottomIndex[iElement] = index
-            SetMenuOptionValue(bottomArrayOID[iElement], _potionQueue[iElement].getName())
+            potionListIndex[iElement] = index
+            SetMenuOptionValue(potionAssignOID[iElement], _potionQueue[iElement].getName())
 		endIf
 		iElement += 1
 	endWhile
 
 	iElement = 0
-	While iElement < leftArrayOID.Length
-		If (option == leftArrayOID[iElement])
+	While iElement < leftAssignOID.Length
+		If (option == leftAssignOID[iElement])
 			_leftHandQueue[iElement] = _leftHandList[index]
-            leftIndex[iElement] = index
-            SetMenuOptionValue(leftArrayOID[iElement], _leftHandQueue[iElement].getName())
+            leftListIndex[iElement] = index
+            SetMenuOptionValue(leftAssignOID[iElement], _leftHandQueue[iElement].getName())
 		endIf
 		iElement += 1
 	endWhile
 
 	iElement = 0
-	While iElement < rightArrayOID.Length
-		If (option == rightArrayOID[iElement])
+	While iElement < rightAssignOID.Length
+		If (option == rightAssignOID[iElement])
 			_rightHandQueue[iElement] = _rightHandList[index]
-            rightIndex[iElement] = index
-            SetMenuOptionValue(rightArrayOID[iElement], _rightHandQueue[iElement].getName())
+            rightListIndex[iElement] = index
+            SetMenuOptionValue(rightAssignOID[iElement], _rightHandQueue[iElement].getName())
 		endIf
 		iElement += 1
 	endWhile
