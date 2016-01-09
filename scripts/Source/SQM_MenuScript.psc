@@ -29,30 +29,10 @@ int fadeAlphaOID
 int fadeOutDurationOID
 int fadeInDurationOID
 int fadeWaitOID
-bool fadeOut = true
-float fadeAlpha = 0.0
-float fadeOutDuration = 200.0
-float fadeInDuration = 15.0
-float fadeWait = 500.0
-;Used to control fading out when many buttons are pressed
-int waitsQueued
-bool ASSIGNMENT_MODE = false 
-
 ;toggle visibility box, transparency slider, and refresh button
 int visOID
 int transOID
 int refreshOID
-;If this is toggled, only favorited items will show up in the MCM menu
-int mustBeFavoritedOID
-bool mustBeFavorited = false
-int assignEquippedOID
-
-;array of object id's for each item queue (MCM menu)
-int[] shoutAssignOID
-int[] potionAssignOID
-int[] leftAssignOID
-int[] rightAssignOID
-
 ;mcm keymap option id's
 int keyOID_CSHOUT
 int keyOID_CPOTION
@@ -62,9 +42,39 @@ int keyOID_ACTIVATE
 int keyOID_ASSIGNLEFT
 int keyOID_ASSIGNRIGHT
 int keyOID_ASSIGNSHOUT
+int assignEquippedOID
+int mustBeFavoritedOID
+;array of object id's for each item queue (MCM menu)
+int[] shoutAssignOID
+int[] potionAssignOID
+int[] leftAssignOID
+int[] rightAssignOID
+
+;keys
+int cycleShoutKey = 45			; X
+int cyclePotionKey = 21		; Y
+int cycleLeftKey = 47		; V
+int cycleRightKey = 48		; B
+int usePotionKey = 34	; G
+
+int assignLeftKey = -1  ;f1
+int assignRightKey = -1 ;f2
+int assignShoutKey = -1 ;f3
+
 ;-------------------------------------------------------------------------
 ;Global variables 
 ;-------------------------------------------------------------------------
+bool fadeOut = true
+float fadeAlpha = 0.0
+float fadeOutDuration = 200.0
+float fadeInDuration = 15.0
+float fadeWait = 500.0
+;Used to control fading out when many buttons are pressed
+int waitsQueued
+bool ASSIGNMENT_MODE = false 
+
+;If this is toggled, only favorited items will show up in the MCM menu
+bool mustBeFavorited = false
 ;these variables contain the item and item IDs of the different elements in the queues
 string[]	 _potionListName
 string[]	 _shoutListName
@@ -96,21 +106,11 @@ int[] 		shoutListIndex
 int[] 		potionListIndex
 int[] 		leftListIndex
 int[] 		rightListIndex
+bool[]      itemDataUpToDate
 
 ;initialize values for visibility and transparency
 bool visVal = true
 float transVal = 50.0
-
-;keys
-int cycleShoutKey = 45			; X
-int cyclePotionKey = 21		; Y
-int cycleLeftKey = 47		; V
-int cycleRightKey = 48		; B
-int usePotionKey = 34	; G
-
-int assignLeftKey = -1  ;f1
-int assignRightKey = -1 ;f2
-int assignShoutKey = -1 ;f3
 
 int MAX_QUEUE_SIZE = 7
 
@@ -432,12 +432,12 @@ Int[] Function GetItemIconArgs(int queueID)
     endIf
     Form item = Q[_currQIndices[queueID]]
     int[] args = new Int[4]
-    args[0] = item.GetType()
-    args[1] = -1
-    args[2] = -1
-    args[3] = item.GetFormID()
+    args[0] = queueID 
+    args[1] = _currQIndices[queueID] 
+    args[2] = item.GetType() 
+    args[3] = -1 
     ;if it is a weapon, we want its weapon type
-    if(args[0] == 41)
+    if(args[2] == 41)
         Weapon W = item as Weapon
         int weaponType = W.GetWeaponType()
             ;2H axes and maces have the same ID for some reason, so we have to differentiate them
@@ -451,7 +451,7 @@ Int[] Function GetItemIconArgs(int queueID)
                 weaponType = 7
                 endIf
             endIf
-        args[1] = weaponType   
+        args[3] = weaponType   
     endIf       
     return args
 endFunction
@@ -482,73 +482,76 @@ endFunction
 Event OnKeyUp(Int KeyCode, Float HoldTime)
 	GotoState("PROCESSING")
     int[] args
-	If KeyCode == SQM.getUP() && !Utility.IsInMenuMode()
-        fadeInWidget()
+	If KeyCode == cycleShoutKey && !Utility.IsInMenuMode()
         if(ASSIGNMENT_MODE)
             advanceQueue_ASSIGNMENT_MODE(2)
         else
             cyclePower()
         endIf
-        args = GetItemIconArgs(2)
-        SQM.setUpStr(getCurrQItemName(2))
-        SQM.activateButton("up", _currQIndices[2], args)
-        fadeOutWidget()
-	elseIf KeyCode == SQM.getDOWN() && !Utility.IsInMenuMode()
-        fadeInWidget()
+        ;If the item data is not up to date, set it
+        if(!itemDataUpToDate[2*MAX_QUEUE_SIZE + _currQIndices[2]])
+            args = GetItemIconArgs(2)
+            SQM.setItemData(getCurrQItemName(2), args)
+        endIf
+        SQM.shoutIndex = _currQIndices[2]
+
+	elseIf KeyCode == cyclePotionKey && !Utility.IsInMenuMode()
 		cyclePotion()
-        args = GetItemIconArgs(3)
-		SQM.setDownStr(getCurrQItemName(3))
-		SQM.activateButton("down", _currQIndices[3], args)
-        fadeOutWidget()
-	elseIf KeyCode == SQM.getLEFT() && !Utility.IsInMenuMode()
-        fadeInWidget()
+        if(!itemDataUpToDate[3*MAX_QUEUE_SIZE + _currQIndices[3]])
+            args = GetItemIconArgs(3)
+            SQM.setItemData(getCurrQItemName(3), args)
+        endIf
+        SQM.potionIndex = _currQIndices[3]
+
+	elseIf KeyCode == cycleLeftKey && !Utility.IsInMenuMode()
         if(ASSIGNMENT_MODE)
             advanceQueue_ASSIGNMENT_MODE(0)
         else
             cycleHand(0)
         endIf
-        args = GetItemIconArgs(0)
-        SQM.setLeftStr(getCurrQItemName(0))
-        SQM.activateButton("left", _currQIndices[0], args)
-        fadeOutWidget()
-	elseIf KeyCode == SQM.getRIGHT() && !Utility.IsInMenuMode()
-        fadeInWidget()
+        if(!itemDataUpToDate[_currQIndices[0]])
+            args = GetItemIconArgs(0)
+            SQM.setItemData(getCurrQItemName(0), args)
+        endIf
+        SQM.leftIndex = _currQIndices[0]
+
+	elseIf KeyCode == cycleRightKey && !Utility.IsInMenuMode()
         if(ASSIGNMENT_MODE)
             advanceQueue_ASSIGNMENT_MODE(1)
         else
             cycleHand(1)
         endIf
-        args = GetItemIconArgs(1)
-        SQM.setRightStr(getCurrQItemName(1))
-        SQM.activateButton("right", _currQIndices[1], args)
-        fadeOutWidget()
-	elseIf KeyCode == SQM.getACTIVATE() && !Utility.IsInMenuMode()
-        fadeInWidget()
+        if(!itemDataUpToDate[MAX_QUEUE_SIZE + _currQIndices[1]])
+            args = GetItemIconArgs(1)
+            SQM.setItemData(getCurrQItemName(1), args)
+        endIf
+        SQM.rightIndex = _currQIndices[1]
+
+	elseIf KeyCode == usePotionKey && !Utility.IsInMenuMode()
 		useEquippedItem()
-        fadeOutWidget()
+
     elseIf KeyCode == assignLeftKey && !Utility.IsInMenuMode()
-        Debug.MessageBox("INSIDE")
-        fadeInWidget()
         AssignCurrEquippedItem(0)
         args = GetItemIconArgs(0)
-		SQM.setLeftStr(getCurrQItemName(0))
-		SQM.activateButton("left", _currQIndices[0], args)
-        fadeOutWidget()
+		SQM.setItemData(_leftHandQueue[_currQIndices[0]].GetName(), args)
+        SQM.leftIndex = _currQIndices[0]
+
     elseIf KeyCode == assignRightKey && !Utility.IsInMenuMode()
-        fadeInWidget()
         AssignCurrEquippedItem(1)
         args = GetItemIconArgs(1)
-		SQM.setRightStr(getCurrQItemName(1))
-		SQM.activateButton("right", _currQIndices[1], args)
-        fadeOutWidget()
+		SQM.setItemData(_rightHandQueue[_currQIndices[1]].GetName(), args)
+        SQM.rightIndex = _currQIndices[1]
+
     elseIf KeyCode == assignShoutKey && !Utility.IsInMenuMode()
-        fadeInWidget()
         AssignCurrEquippedItem(2)
         args = GetItemIconArgs(2)
-		SQM.setUpStr(getCurrQItemName(2))
-		SQM.activateButton("up", _currQIndices[2], args)
-        fadeOutWidget()
+		SQM.setItemData(_shoutQueue[_currQIndices[2]].GetName(), args)
+        SQM.shoutIndex = _currQIndices[2]
 	EndIf
+    if(args[0])
+        itemDataUpToDate[args[0]*MAX_QUEUE_SIZE + args[1]] = true
+    endIf
+    SQM.fadeInAndOut(fadeInDuration/100.0, fadeOutDuration/100.0, fadeWait/100.0, fadeAlpha, fadeOut)
 	GotoState("")
 EndEvent
 
@@ -721,7 +724,7 @@ bool function ValidateSlot(int queueID)
 			return false	
 		endIf
 	endIf
-	return true 
+	return true
 endFunction
 
 ;--------------------------------------------------------------------------------------------------------------------
@@ -794,9 +797,6 @@ function AssignCurrEquippedItem(Int aiSlot)
     elseif(aiSlot == 2)
         _shoutQueue[ndx] = obj 
     endIf
-
-    ;Debug.MessageBox(obj.GetName())
-
 endFunction
 ;-----------------------------------------------------------------------------------------------------------------------
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -811,9 +811,12 @@ endFunction
 event OnVersionUpdate(int a_version)
     Debug.Notification("Updating SQM V1.20")
     waitsQueued = 0
-    RegisterForKey(assignLeftKey) 
-    RegisterForKey(assignRightKey) 
-    RegisterForKey(assignShoutKey) 
+    int ndx = 0
+    ItemDataUpToDate = new bool[28]
+    while ndx < 28
+        ItemDataUpToDate[ndx] = false
+        ndx += 1
+    endWhile
 endEvent 
 
 function EmptyLists()
@@ -873,17 +876,12 @@ Event OnConfigInit()
 	leftAssignOID = new Int[7]
 	rightAssignOID = new Int[7]
 
-	RegisterForKey(SQM.getUP())
-	RegisterForKey(SQM.getDOWN())
-	RegisterForKey(SQM.getLEFT())
-	RegisterForKey(SQM.getRIGHT())
-	RegisterForKey(SQM.getACTIVATE())
+	RegisterForKey(cycleLeftKey)
+	RegisterForKey(cycleRightKey)
+	RegisterForKey(cycleShoutKey)
+	RegisterForKey(cyclePotionKey)
+	RegisterForKey(usePotionKey)
 
-	;Initializing widget strings
-	SQM.setUpStr(getCurrQItemName(2))
-	SQM.setDownStr(getCurrQItemName(3))
-	SQM.setLeftStr(getCurrQItemName(0))
-	SQM.setRightStr(getCurrQItemName(1))
 EndEvent
 
 ;called every time a page is initialized
@@ -1106,7 +1104,7 @@ event OnOptionSliderOpen(int option)
 		SetSliderDialogDefaultValue(200.00)
     elseIf (option == fadeInDurationOID)
         SetSliderDialogStartValue(fadeInDuration)
-		SetSliderDialogRange(0.00, 100.00)
+		SetSliderDialogRange(1.00, 100.00)
 		SetSliderDialogInterval(1)
 		SetSliderDialogDefaultValue(30) 
     elseIf (option == fadeWaitOID)
@@ -1224,68 +1222,55 @@ bool function checkKeyConflict(string conflictControl, string conflictName)
     return continue
 endFunction
 
+Int function switchKeyMaps(int oldKey, int newKey)
+    UnregisterForKey(oldKey)
+    RegisterForKey(newKey)
+    return newKey
+endFunction
+
 ;called when a key map box is changed
 event OnOptionKeyMapChange(int option, int keyCode, string conflictControl, string conflictName)
     If (option == keyOID_CSHOUT)
         if(checkKeyConflict(conflictControl, conflictName))
-            cycleShoutKey = keyCode
+            ;Unregister old key, register new key
+            cycleShoutKey = switchKeyMaps(cycleShoutKey, keyCode) 
+            ;Change the displayed key in MCM
             SetKeyMapOptionValue(keyOID_CSHOUT, cycleShoutKey)
-            UnregisterForKey(SQM.getUP())
-            SQM.setShoutKey(keyCode)
-            RegisterForKey(SQM.getUP())
         endIf
     elseIf (option == keyOID_CPOTION)
         if(checkKeyConflict(conflictControl, conflictName))
-            cyclePotionKey = keyCode
+            cyclePotionKey = switchKeyMaps(cyclePotionKey, keyCode) 
             SetKeyMapOptionValue(keyOID_CPOTION, cyclePotionKey)
-            UnregisterForKey(SQM.getDOWN())
-            SQM.setPotionKey(keyCode)
-            RegisterForKey(SQM.getDOWN())
         endIf
     elseIf (option == keyOID_CLEFTHAND)
         if(checkKeyConflict(conflictControl, conflictName))
-            cycleLeftKey = keyCode
+            cycleLeftKey = switchKeyMaps(cycleLeftKey, keyCode)
             SetKeyMapOptionValue(keyOID_CLEFTHAND, cycleLeftKey)
-            UnregisterForKey(SQM.getLEFT())
-            SQM.setLeftKey(keyCode)
-            RegisterForKey(SQM.getLEFT())
         endIf
     elseIf (option == keyOID_CRIGHTHAND)
         if(checkKeyConflict(conflictControl, conflictName))
-            cycleRightKey = keyCode
+            cycleRightKey = switchKeyMaps(cycleRightKey, keyCode)
             SetKeyMapOptionValue(keyOID_CRIGHTHAND, cycleRightKey)
-            UnregisterForKey(SQM.getRIGHT())
-            SQM.setRightKey(keyCode)
-            RegisterForKey(SQM.getRIGHT())
         endIf
     elseIf (option == keyOID_ACTIVATE)
         if(checkKeyConflict(conflictControl, conflictName))
-            usePotionKey = keyCode
+            usePotionKey = switchKeyMaps(usePotionKey, keyCode)
             SetKeyMapOptionValue(keyOID_ACTIVATE, usePotionKey)
-            UnregisterForKey(SQM.getACTIVATE())
-            SQM.setACTIVATE(keyCode)
-            RegisterForKey(SQM.getACTIVATE())
         endIf
     elseIf(option == keyOID_ASSIGNLEFT)
         if(checkKeyConflict(conflictControl, conflictName))
-            UnregisterForKey(assignLeftKey)
-            assignLeftKey = keyCode
+            assignLeftKey = switchKeyMaps(assignLeftKey, keyCode)
             SetKeyMapOptionValue(keyOID_ASSIGNLEFT, assignLeftKey)
-            RegisterForKey(assignLeftKey)
         endIf
     elseIf(option == keyOID_ASSIGNRIGHT)
         if(checkKeyConflict(conflictControl, conflictName))
-            UnregisterForKey(assignRightKey)
-            assignRightKey = keyCode
+            assignRightKey = switchKeyMaps(assignRightKey, keyCode)
             SetKeyMapOptionValue(keyOID_ASSIGNRIGHT, assignRightKey)
-            RegisterForKey(assignRightKey)
         endIf
     elseIf(option == keyOID_ASSIGNSHOUT)
         if(checkKeyConflict(conflictControl, conflictName))
-            UnregisterForKey(assignShoutKey)
-            assignShoutKey = keyCode
+            assignShoutKey = switchKeyMaps(assignShoutKey, keyCode)
             SetKeyMapOptionValue(keyOID_ASSIGNSHOUT, assignShoutKey)
-            RegisterForKey(assignShoutKey)
         endIf 
     endIf
 endEvent
@@ -1342,6 +1327,7 @@ event OnOptionMenuAccept(int option, int index)
 		If (option == shoutAssignOID[iElement])
 			_shoutQueue[iElement] = _shoutsKnown[index]
             shoutListIndex[iElement] = index
+            ItemDataUpToDate[2*MAX_QUEUE_SIZE + iElement] = false
             SetMenuOptionValue(shoutAssignOID[iElement], _shoutQueue[iElement].getName())
 		endIf
 		iElement += 1
@@ -1351,6 +1337,7 @@ event OnOptionMenuAccept(int option, int index)
 	While iElement < potionAssignOID.Length
 		If (option == potionAssignOID[iElement])
 			_potionQueue[iElement] = _potionList[index]
+            ItemDataUpToDate[3*MAX_QUEUE_SIZE + iElement] = false
             potionListIndex[iElement] = index
             SetMenuOptionValue(potionAssignOID[iElement], _potionQueue[iElement].getName())
 		endIf
@@ -1361,6 +1348,7 @@ event OnOptionMenuAccept(int option, int index)
 	While iElement < leftAssignOID.Length
 		If (option == leftAssignOID[iElement])
 			_leftHandQueue[iElement] = _leftHandList[index]
+            ItemDataUpToDate[iElement] = false
             leftListIndex[iElement] = index
             SetMenuOptionValue(leftAssignOID[iElement], _leftHandQueue[iElement].getName())
 		endIf
@@ -1371,6 +1359,7 @@ event OnOptionMenuAccept(int option, int index)
 	While iElement < rightAssignOID.Length
 		If (option == rightAssignOID[iElement])
 			_rightHandQueue[iElement] = _rightHandList[index]
+            ItemDataUpToDate[MAX_QUEUE_SIZE + iElement] = false
             rightListIndex[iElement] = index
             SetMenuOptionValue(rightAssignOID[iElement], _rightHandQueue[iElement].getName())
 		endIf
