@@ -33,6 +33,7 @@ int fadeWaitOID
 int visOID
 int transOID
 int refreshOID
+int refreshPotionsOID
 ;mcm keymap option id's
 int keyOID_CSHOUT
 int keyOID_CPOTION
@@ -160,6 +161,37 @@ endFunction
 ;Functions for populating the queues with items in the
 ;inventory 
 ;-------------------------------------------------------------------------
+;This will only populate the potions lists
+Function populatePotionsList(ObjectReference akContainer)
+
+	_potionListName[0] = "<Empty>"
+	_potionList[0] = None
+	Int itemCount = 0
+    Int nextPotionIndex = 0
+    Int ndx = 0
+    int totalItems = akContainer.GetNumItems()
+    while ndx < totalItems
+		Form kForm = akContainer.GetNthForm(ndx)
+        ;if it must be favorited, make sure it is. else proceed 
+		if(!mustBeFavorited || (mustBeFavorited && Game.isObjectFavorited(kForm)))
+            itemCount = PlayerRef.getItemCount(kForm)
+			If kForm.GetType() == 46 ; is a potion
+				_potionListName[nextPotionIndex] = kForm.getName() + "  (" + itemCount + ")"
+				_potionList[nextPotionIndex] = kForm
+				nextPotionIndex += 1
+            endIf
+        endIf
+        ndx +=1
+    endWhile
+    ;empty the rest of the list
+    if ndx < 128
+        while ndx < 128
+            _potionList[ndx] = None
+            _potionListName[ndx] = "" 
+            ndx += 1
+        endWhile
+    endIf        
+endFunction
 
 ;populates potion and weapon queues for the dropdown options in the MCM
 Function populateLists(ObjectReference akContainer)
@@ -178,9 +210,10 @@ Function populateLists(ObjectReference akContainer)
 	Int nextLHIndex = 1
 	Int itemCount = 0
     String itemStr 
+    int totalItems = akContainer.GetNumItems() 
     SetTextOptionValue(refreshOID, "Updating Items")
 	;iterate through all items in player's inventory
-	While ndx < akContainer.GetNumItems()
+	While ndx < totalItems
 		Form kForm = akContainer.GetNthForm(ndx)
         ;if it must be favorited, make sure it is. else proceed 
 		if(!mustBeFavorited || (mustBeFavorited && Game.isObjectFavorited(kForm)))
@@ -951,7 +984,8 @@ event OnPageReset(string page)
 			potionAssignOID[ndx] = AddMenuOption("Slot " + (ndx + 1), _potionQueue[ndx].getName())
 			ndx += 1
 		endWhile
-		refreshOID = AddTextOption("Refresh Inventory Items", "")
+		refreshOID = AddTextOption("Refresh Inventory Items", "") 
+		refreshPotionsOID = AddTextOption("Refresh Potions List Only", "")
 	;Left Hand page
     elseIf (page == pages[3])
         AddHeaderOption(pages[3])
@@ -987,6 +1021,10 @@ event OnOptionSelect(int option)
         SetTextOptionValue(refreshOID, "Updating...")
         populateLists(PlayerRef)
         SetTextOptionValue(refreshOID, "")
+    elseIf (option == refreshPotionsOID)
+        SetTextOptionValue(refreshOID, "Updating...")
+        populatePotionsList(PlayerRef)
+        SetTextOptionValue(refreshOID, "") 
     elseIf (option == fadeOID)
         fadeOut = !fadeOut
         SetToggleOptionValue(fadeOID, fadeOut)
@@ -1009,18 +1047,18 @@ event OnOptionSelect(int option)
         if(ASSIGNMENT_MODE)
             flags = OPTION_FLAG_WITH_UNMAP
             ;Change gem colors
-            ;SQM.count1 = _currQIndices[0]
-            ;SQM.count2 = _currQIndices[1]
-            ;SQM.count3 = _currQIndices[2]
+            SQM.leftIndex = _currQIndices[0]
+            SQM.rightIndex = _currQIndices[1]
+            SQM.shoutIndex = _currQIndices[2]
             ;Register keys
             RegisterForKey(assignLeftKey)
             RegisterForKey(assignRightKey)
             RegisterForKey(assignShoutKey)
         else
             flags = OPTION_FLAG_DISABLED
-            ;SQM.count1 = _currQIndices[0]
-            ;SQM.count2 = _currQIndices[1]
-            ;SQM.count3 = _currQIndices[2]
+            SQM.leftIndex = _currQIndices[0]
+            SQM.rightIndex = _currQIndices[1]
+            SQM.shoutIndex = _currQIndices[2]
             UnregisterForKey(assignLeftKey)
             UnregisterForKey(assignRightKey)
             UnregisterForKey(assignShoutKey)
@@ -1204,7 +1242,10 @@ event OnOptionHighlight(int option)
         SetInfoText("Pressing this key will assign the weapon, spell, or item in your right hand to the current slot in the left hand queue.")
     elseIf(option == keyOID_ASSIGNSHOUT)
         SetInfoText("Pressing this key will assign the shout or ability in your power slot to the current slot in the left hand queue.")
+    elseIf(option == refreshPotionsOID)
+        SetInfoText("Refreshes your potion list (and only your potion list).  This is just slightly quicker than updating everything.")
     endIf
+
 endEvent
 
 ;Method taken from MCM API reference
