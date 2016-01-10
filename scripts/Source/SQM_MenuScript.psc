@@ -509,7 +509,34 @@ Int[] Function GetItemIconArgs(int queueID)
         elseIf(school == "Restoration")
             args[3] = 22 
         endIf
-        Debug.MessageBox("Spell: " + args[3])
+    ;Is a potion
+    elseIf(args[2] == 46)
+        Potion P = item as Potion
+        if(P.IsPoison())
+            args[3] = 15
+            return args
+        elseIf(P.IsFood())
+            args[3] = 13
+            return args 
+        endIf
+        int pIndex = P.GetCostliestEffectIndex()
+        MagicEffect pEffect = P.GetNthEffectMagicEffect(pIndex)
+        String pStr = pEffect.GetName() 
+        if(pStr == "Restore Health" || pStr == "Regenerate Health")
+            args[3] = 0
+        elseif(pStr == "Restore Magicka" || pStr == "Regenerate Magicka")
+            args[3] = 3 
+        elseif(pStr == "Restore Stamina" || pStr == "Regenerate Stamina")
+            args[3] = 6 
+        elseif(pStr == "Resist Fire")
+            args[3] = 9 
+        elseif(pStr == "Resist Shock")
+            args[3] = 10 
+        elseif(pStr == "Resist Frost")
+            args[3] = 11 
+        endIf
+        Debug.MessageBox(pStr)
+        Debug.MessageBox(args[3])
     endIf       
     return args
 endFunction
