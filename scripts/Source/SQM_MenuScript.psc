@@ -12,6 +12,8 @@ SQM_WidgetScript Property SQM Auto
 
 Actor Property PlayerRef  Auto  
 
+Form Property Unarmed1H  Auto  
+Form Property Unarmed2H  Auto  
 Shout[] Property shoutListFull  Auto  
 Shout[] _DLCShouts
 Spell[] _voiceSpells
@@ -199,15 +201,22 @@ Function populateLists(ObjectReference akContainer)
 	_potionListName[0] = "<Empty>"
 	_rightHandListName[0] = "<Empty>"
 	_leftHandListName[0] = "<Empty>"
-
 	_potionList[0] = None
 	_rightHandList[0] = None
 	_leftHandList[0] = None 
+    _rightHandListName[1] = Unarmed1H.GetName() 
+	_rightHandList[1] = Unarmed1H
+    _leftHandListName[1] = Unarmed1H.GetName() 
+	_leftHandList[1] = Unarmed1H
+    _rightHandListName[2] = Unarmed2H.GetName() 
+	_rightHandList[2] = Unarmed2H
+    _leftHandListName[2] = Unarmed2H.GetName()
+	_leftHandList[2] = Unarmed2H
 
 	Int ndx = 0
 	Int nextPotionIndex = 1 
-	Int nextRHIndex = 1
-	Int nextLHIndex = 1
+	Int nextRHIndex = 3 
+	Int nextLHIndex = 3 
 	Int itemCount = 0
     String itemStr 
     int totalItems = akContainer.GetNumItems() 
@@ -215,46 +224,44 @@ Function populateLists(ObjectReference akContainer)
 	;iterate through all items in player's inventory
 	While ndx < totalItems
 		Form kForm = akContainer.GetNthForm(ndx)
-        ;if it must be favorited, make sure it is. else proceed 
-		if(!mustBeFavorited || (mustBeFavorited && Game.isObjectFavorited(kForm)))
-            itemCount = PlayerRef.getItemCount(kForm)
-            itemStr = ""
-            if(itemCount > 1 && kForm.GetType() == 41)
-                itemStr = " [" + itemCount + "]"   
-            endIf
-			If kForm.GetType() == 46 ; is a potion
-				_potionListName[nextPotionIndex] = kForm.getName() + "  (" + itemCount + ")"
-				_potionList[nextPotionIndex] = kForm
-				nextPotionIndex += 1
-			elseIf kForm.GetType() == 41 ; is a weapon
-				;only add 2 handers and ranged to RH slot
-				if((kForm as weapon).GetWeapontype() > 4)
-					_rightHandListName[nextRHIndex] = kForm.getName() + itemStr
-					_rightHandList[nextRHIndex] = kForm
-					nextRHIndex += 1
-				else
-				    ;1h weapons go in both
-					_rightHandListName[nextRHIndex] = kForm.getName() + itemStr
-					_rightHandList[nextRHIndex] = kForm
-					nextRHIndex += 1
-					;adding to LH queue
-					_leftHandListName[nextLHIndex] = kForm.getName() + itemStr
-					_leftHandList[nextLHIndex] = kForm
-					nextLHIndex += 1
-				endif
-			;add shields to the lefthand queue
-			elseIf (kForm.GetType() == 26 && (kForm as Armor).GetSlotMask() == 512)
-				_leftHandListName[nextLHIndex] = kForm.getName() + itemStr
-				_leftHandList[nextLHIndex] = kForm
-				nextLHIndex += 1
-			;Light (Torch)
-			elseIf kForm.GetType() == 31
+        if(kForm != Unarmed1H && kForm != Unarmed2H)
+            ;if it must be favorited, make sure it is. else proceed 
+            if(!mustBeFavorited || (mustBeFavorited && Game.isObjectFavorited(kForm)))
                 itemCount = PlayerRef.getItemCount(kForm)
-				_leftHandListName[nextLHIndex] = kForm.getName() + "  (" + itemCount + ")"
-				_leftHandList[nextLHIndex] = kForm
-				nextLHIndex += 1	
-			endIf
-		endIf
+                itemStr = ""
+                if(itemCount > 1 && kForm.GetType() == 41)
+                    itemStr = " [" + itemCount + "]"   
+                endIf
+                If kForm.GetType() == 46 ; is a potion
+                    _potionListName[nextPotionIndex] = kForm.getName() + "  (" + itemCount + ")"
+                    _potionList[nextPotionIndex] = kForm
+                    nextPotionIndex += 1
+                elseIf kForm.GetType() == 41 ; is a weapon
+                    ;only add 2 handers and ranged to RH slot
+                    if((kForm as weapon).GetWeapontype() <= 4)
+                        ;adding to LH queue
+                        _leftHandListName[nextLHIndex] = kForm.getName() + itemStr
+                        _leftHandList[nextLHIndex] = kForm
+                        nextLHIndex += 1
+                    endIf
+                    ;1h weapons go in both
+                    _rightHandListName[nextRHIndex] = kForm.getName() + itemStr
+                    _rightHandList[nextRHIndex] = kForm
+                    nextRHIndex += 1
+                ;add shields to the lefthand queue
+                elseIf (kForm.GetType() == 26 && (kForm as Armor).GetSlotMask() == 512)
+                    _leftHandListName[nextLHIndex] = kForm.getName() + itemStr
+                    _leftHandList[nextLHIndex] = kForm
+                    nextLHIndex += 1
+                ;Light (Torch)
+                elseIf kForm.GetType() == 31
+                    itemCount = PlayerRef.getItemCount(kForm)
+                    _leftHandListName[nextLHIndex] = kForm.getName() + "  (" + itemCount + ")"
+                    _leftHandList[nextLHIndex] = kForm
+                    nextLHIndex += 1	
+                endIf
+            endIf
+        endIf
 		ndx += 1
 	endWhile
 
@@ -484,7 +491,25 @@ Int[] Function GetItemIconArgs(int queueID)
                 weaponType = 7
                 endIf
             endIf
-        args[3] = weaponType   
+        args[3] = weaponType
+    ;Is a spell
+    elseIf(args[2] == 22) 
+        Spell S = item as Spell
+        int sIndex = S.GetCostliestEffectIndex()
+        MagicEffect sEffect = S.GetNthEffectMagicEffect(sIndex)
+        String school = sEffect.GetAssociatedSkill()
+        if(school == "Alteration")
+            args[3] = 18 
+        elseIf(school == "Conjuration")
+            args[3] = 19
+        elseIf(school == "Destruction")
+            args[3] = 20 
+        elseIf(school == "Illusion")
+            args[3] = 21 
+        elseIf(school == "Restoration")
+            args[3] = 22 
+        endIf
+        Debug.MessageBox("Spell: " + args[3])
     endIf       
     return args
 endFunction
@@ -684,6 +709,10 @@ bool function cycleHand(int slotID)
 	Form currEquippedItem = PlayerRef.GetEquippedObject(slotID)
 	Form currQItem = queue[currIndex]
 	if(currEquippedItem != currQItem && currQItem != None)
+        if(currQItem.GetName() == "Fist")
+            UnequipHand(slotID)
+            return true
+        endIf
 		if(ValidateItem(currQItem))
 			UnequipHand(slotID)
 			if(currQItem.getType() == 22)					
@@ -700,6 +729,10 @@ bool function cycleHand(int slotID)
 		
 	int newIndex = advanceQueue(slotID, 0)
 	Form nextQItem = queue[newIndex]
+    if(currQItem.GetName() == "Fist")
+        UnequipHand(slotID)
+        return true
+    endIf
 	if(ValidateItem(nextQItem))
 		UnequipHand(slotID)
 		if(nextQItem.getType() == 22)
@@ -876,6 +909,12 @@ Event OnConfigInit()
 	Pages[3] = "Left Hand Group"
 	Pages[4] = "Right Hand Group"
     waitsQueued = 0
+    if(!playerRef.getItemCount(Unarmed1H))
+        PlayerRef.AddItem(Unarmed1H)
+    endIf
+    if(!playerRef.getItemCount(Unarmed2H))
+        PlayerRef.AddItem(Unarmed2H)
+    endIf
 	_currQIndices = new int[4]
 
     _voiceSpells = new Spell[128]
@@ -965,7 +1004,7 @@ event OnPageReset(string page)
         assignEquippedOID = AddToggleOption("Assignment Mode On/Off", ASSIGNMENT_MODE)
         keyOID_ASSIGNLEFT = AddKeyMapOption("Assign Left Hand Object", assignLeftKey, flags)
         keyOID_ASSIGNRIGHT = AddKeyMapOption("Assign Right Hand Object", assignRightKey, flags)
-        keyOID_ASSIGNSHOUT = AddKeyMapOption("Assign Shout Object", assignRightKey, flags)
+        keyOID_ASSIGNSHOUT = AddKeyMapOption("Assign Shout Object", assignShoutKey, flags)
     ;Shout page
     elseIf (page == pages[1])
         AddHeaderOption(pages[1])
@@ -1412,3 +1451,5 @@ endEvent
 ;END MENU WIDGET CODE
 ;-----------------------------------------------------------------------------------------------------------------------
 ;-----------------------------------------------------------------------------------------------------------------------
+
+

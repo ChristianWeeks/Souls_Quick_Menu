@@ -171,7 +171,6 @@ EndFunction
 
 ;events
 Event OnWidgetReset()
-    Debug.MessageBox("OnWidgetReset")
     RequireExtend = false
 	parent.OnWidgetReset()
 	setX(X)
